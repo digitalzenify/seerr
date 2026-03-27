@@ -75,6 +75,9 @@ const SettingsAbout = () => {
             <code className="truncate">
               {data.version.replace('develop-', '')}
             </code>
+            <span className="ml-2 text-sm text-gray-400">
+              Forked by digitalzenify
+            </span>
             {status?.commitTag !== 'local' &&
               (status?.updateAvailable ? (
                 <a

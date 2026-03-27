@@ -31,6 +31,8 @@ export interface DownloadingItem {
 class DownloadTracker {
   private radarrServers: Record<number, DownloadingItem[]> = {};
   private sonarrServers: Record<number, DownloadingItem[]> = {};
+  private lastUpdated = 0;
+  private updateInProgress: Promise<void> | null = null;
 
   public getMovieProgress(
     serverId: number,
@@ -61,11 +63,32 @@ class DownloadTracker {
   public async resetDownloadTracker() {
     this.radarrServers = {};
     this.sonarrServers = {};
+    this.lastUpdated = 0;
+  }
+
+  /**
+   * Ensure the download cache is reasonably fresh.  If the last successful
+   * update was more than {@link maxAgeMs} milliseconds ago, a full update is
+   * triggered.  Concurrent callers share the same in-flight promise so that
+   * we never fire duplicate requests against Radarr / Sonarr.
+   */
+  public async updateIfStale(maxAgeMs = 30_000): Promise<void> {
+    if (Date.now() - this.lastUpdated <= maxAgeMs) {
+      return;
+    }
+    // Coalesce concurrent callers behind the same promise
+    if (!this.updateInProgress) {
+      this.updateInProgress = this.updateDownloads().finally(() => {
+        this.updateInProgress = null;
+      });
+    }
+    await this.updateInProgress;
   }
 
   public async updateDownloads() {
     await this.updateRadarrDownloads();
     await this.updateSonarrDownloads();
+    this.lastUpdated = Date.now();
   }
 
   private async updateRadarrDownloads() {
@@ -83,78 +106,74 @@ class DownloadTracker {
     // Load downloads from Radarr servers
     await Promise.all(
       filteredServers.map(async (server) => {
-        if (server.syncEnabled) {
-          const radarr = new RadarrAPI({
-            apiKey: server.apiKey,
-            url: RadarrAPI.buildUrl(server, '/api/v3'),
-          });
+        const radarr = new RadarrAPI({
+          apiKey: server.apiKey,
+          url: RadarrAPI.buildUrl(server, '/api/v3'),
+        });
 
-          // Refresh monitored downloads in a separate try/catch so that a
-          // failure here (e.g. insufficient API-key permissions to POST to
-          // /command) does NOT prevent the queue from being fetched below.
-          try {
-            await radarr.refreshMonitoredDownloads();
-          } catch (e) {
-            logger.warn(
-              `Unable to refresh monitored downloads for Radarr server: ${server.name}. Queue will still be fetched. Cause: ${e.message}`,
-              { label: 'Download Tracker' }
-            );
-          }
-
-          try {
-            const queueItems = await radarr.getQueue();
-
-            this.radarrServers[server.id] = queueItems.map((item) => ({
-              externalId: item.movieId,
-              estimatedCompletionTime: new Date(item.estimatedCompletionTime),
-              mediaType: MediaType.MOVIE,
-              size: item.size,
-              sizeLeft: item.sizeleft,
-              status: item.status,
-              trackedDownloadStatus: item.trackedDownloadStatus,
-              trackedDownloadState: item.trackedDownloadState,
-              timeLeft: item.timeleft,
-              title: item.title,
-              downloadId: item.downloadId,
-            }));
-
-            if (queueItems.length > 0) {
-              logger.debug(
-                `Found ${queueItems.length} item(s) in progress on Radarr server: ${server.name}`,
-                { label: 'Download Tracker' }
-              );
-            }
-          } catch {
-            logger.error(
-              `Unable to get queue from Radarr server: ${server.name}`,
-              {
-                label: 'Download Tracker',
-              }
-            );
-          }
-
-          // Duplicate this data to matching servers
-          const matchingServers = settings.radarr.filter(
-            (rs) =>
-              rs.hostname === server.hostname &&
-              rs.port === server.port &&
-              rs.baseUrl === server.baseUrl &&
-              rs.id !== server.id
+        // Refresh monitored downloads in a separate try/catch so that a
+        // failure here (e.g. insufficient API-key permissions to POST to
+        // /command) does NOT prevent the queue from being fetched below.
+        try {
+          await radarr.refreshMonitoredDownloads();
+        } catch (e) {
+          logger.warn(
+            `Unable to refresh monitored downloads for Radarr server: ${server.name}. Queue will still be fetched. Cause: ${e.message}`,
+            { label: 'Download Tracker' }
           );
+        }
 
-          if (matchingServers.length > 0) {
+        try {
+          const queueItems = await radarr.getQueue();
+
+          this.radarrServers[server.id] = queueItems.map((item) => ({
+            externalId: item.movieId,
+            estimatedCompletionTime: new Date(item.estimatedCompletionTime),
+            mediaType: MediaType.MOVIE,
+            size: item.size,
+            sizeLeft: item.sizeleft,
+            status: item.status,
+            trackedDownloadStatus: item.trackedDownloadStatus,
+            trackedDownloadState: item.trackedDownloadState,
+            timeLeft: item.timeleft,
+            title: item.title,
+            downloadId: item.downloadId,
+          }));
+
+          if (queueItems.length > 0) {
             logger.debug(
-              `Matching download data to ${matchingServers.length} other Radarr server(s)`,
+              `Found ${queueItems.length} item(s) in progress on Radarr server: ${server.name}`,
               { label: 'Download Tracker' }
             );
           }
-
-          matchingServers.forEach((ms) => {
-            if (ms.syncEnabled) {
-              this.radarrServers[ms.id] = this.radarrServers[server.id];
+        } catch {
+          logger.error(
+            `Unable to get queue from Radarr server: ${server.name}`,
+            {
+              label: 'Download Tracker',
             }
-          });
+          );
         }
+
+        // Duplicate this data to matching servers
+        const matchingServers = settings.radarr.filter(
+          (rs) =>
+            rs.hostname === server.hostname &&
+            rs.port === server.port &&
+            rs.baseUrl === server.baseUrl &&
+            rs.id !== server.id
+        );
+
+        if (matchingServers.length > 0) {
+          logger.debug(
+            `Matching download data to ${matchingServers.length} other Radarr server(s)`,
+            { label: 'Download Tracker' }
+          );
+        }
+
+        matchingServers.forEach((ms) => {
+          this.radarrServers[ms.id] = this.radarrServers[server.id];
+        });
       })
     );
   }
@@ -174,79 +193,75 @@ class DownloadTracker {
     // Load downloads from Sonarr servers
     await Promise.all(
       filteredServers.map(async (server) => {
-        if (server.syncEnabled) {
-          const sonarr = new SonarrAPI({
-            apiKey: server.apiKey,
-            url: SonarrAPI.buildUrl(server, '/api/v3'),
-          });
+        const sonarr = new SonarrAPI({
+          apiKey: server.apiKey,
+          url: SonarrAPI.buildUrl(server, '/api/v3'),
+        });
 
-          // Refresh monitored downloads in a separate try/catch so that a
-          // failure here (e.g. insufficient API-key permissions to POST to
-          // /command) does NOT prevent the queue from being fetched below.
-          try {
-            await sonarr.refreshMonitoredDownloads();
-          } catch (e) {
-            logger.warn(
-              `Unable to refresh monitored downloads for Sonarr server: ${server.name}. Queue will still be fetched. Cause: ${e.message}`,
-              { label: 'Download Tracker' }
-            );
-          }
-
-          try {
-            const queueItems = await sonarr.getQueue();
-
-            this.sonarrServers[server.id] = queueItems.map((item) => ({
-              externalId: item.seriesId,
-              estimatedCompletionTime: new Date(item.estimatedCompletionTime),
-              mediaType: MediaType.TV,
-              size: item.size,
-              sizeLeft: item.sizeleft,
-              status: item.status,
-              trackedDownloadStatus: item.trackedDownloadStatus,
-              trackedDownloadState: item.trackedDownloadState,
-              timeLeft: item.timeleft,
-              title: item.title,
-              episode: item.episode,
-              downloadId: item.downloadId,
-            }));
-
-            if (queueItems.length > 0) {
-              logger.debug(
-                `Found ${queueItems.length} item(s) in progress on Sonarr server: ${server.name}`,
-                { label: 'Download Tracker' }
-              );
-            }
-          } catch {
-            logger.error(
-              `Unable to get queue from Sonarr server: ${server.name}`,
-              {
-                label: 'Download Tracker',
-              }
-            );
-          }
-
-          // Duplicate this data to matching servers
-          const matchingServers = settings.sonarr.filter(
-            (ss) =>
-              ss.hostname === server.hostname &&
-              ss.port === server.port &&
-              ss.baseUrl === server.baseUrl &&
-              ss.id !== server.id
+        // Refresh monitored downloads in a separate try/catch so that a
+        // failure here (e.g. insufficient API-key permissions to POST to
+        // /command) does NOT prevent the queue from being fetched below.
+        try {
+          await sonarr.refreshMonitoredDownloads();
+        } catch (e) {
+          logger.warn(
+            `Unable to refresh monitored downloads for Sonarr server: ${server.name}. Queue will still be fetched. Cause: ${e.message}`,
+            { label: 'Download Tracker' }
           );
+        }
 
-          if (matchingServers.length > 0) {
+        try {
+          const queueItems = await sonarr.getQueue();
+
+          this.sonarrServers[server.id] = queueItems.map((item) => ({
+            externalId: item.seriesId,
+            estimatedCompletionTime: new Date(item.estimatedCompletionTime),
+            mediaType: MediaType.TV,
+            size: item.size,
+            sizeLeft: item.sizeleft,
+            status: item.status,
+            trackedDownloadStatus: item.trackedDownloadStatus,
+            trackedDownloadState: item.trackedDownloadState,
+            timeLeft: item.timeleft,
+            title: item.title,
+            episode: item.episode,
+            downloadId: item.downloadId,
+          }));
+
+          if (queueItems.length > 0) {
             logger.debug(
-              `Matching download data to ${matchingServers.length} other Sonarr server(s)`,
+              `Found ${queueItems.length} item(s) in progress on Sonarr server: ${server.name}`,
               { label: 'Download Tracker' }
             );
           }
-
-          matchingServers.forEach((ms) => {
-            if (ms.syncEnabled) {
-              this.sonarrServers[ms.id] = this.sonarrServers[server.id];
+        } catch {
+          logger.error(
+            `Unable to get queue from Sonarr server: ${server.name}`,
+            {
+              label: 'Download Tracker',
             }
-          });
+          );
         }
+
+        // Duplicate this data to matching servers
+        const matchingServers = settings.sonarr.filter(
+          (ss) =>
+            ss.hostname === server.hostname &&
+            ss.port === server.port &&
+            ss.baseUrl === server.baseUrl &&
+            ss.id !== server.id
+        );
+
+        if (matchingServers.length > 0) {
+          logger.debug(
+            `Matching download data to ${matchingServers.length} other Sonarr server(s)`,
+            { label: 'Download Tracker' }
+          );
+        }
+
+        matchingServers.forEach((ms) => {
+          this.sonarrServers[ms.id] = this.sonarrServers[server.id];
+        });
       })
     );
   }

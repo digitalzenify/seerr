@@ -209,6 +209,16 @@ export const startJobs = (): void => {
     }),
   });
 
+  // Perform an immediate download sync on startup so that download data is
+  // available from the very first request, instead of waiting for the first
+  // cron tick.
+  downloadTracker.updateDownloads().catch((e) => {
+    logger.warn('Initial download sync failed; will retry on next tick', {
+      label: 'Jobs',
+      errorMessage: e.message,
+    });
+  });
+
   // Reset download sync everyday at 01:00 am
   scheduledJobs.push({
     id: 'download-sync-reset',
