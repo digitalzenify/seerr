@@ -22,6 +22,7 @@ import type {
   RequestResultsResponse,
 } from '@server/interfaces/api/requestInterfaces';
 import { computeEnhancedStatus } from '@server/lib/enhancedStatus';
+import downloadTracker from '@server/lib/downloadtracker';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -34,6 +35,10 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
   '/',
   async (req, res, next) => {
     try {
+      // Ensure the download tracker cache is fresh so that Media @AfterLoad
+      // hooks see up-to-date queue data from Radarr / Sonarr.
+      await downloadTracker.updateIfStale();
+
       const pageSize = req.query.take ? Number(req.query.take) : 10;
       const skip = req.query.skip ? Number(req.query.skip) : 0;
       const requestedBy = req.query.requestedBy
