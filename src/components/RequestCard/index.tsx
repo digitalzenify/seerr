@@ -20,6 +20,7 @@ import {
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
+import type { EnhancedStatus } from '@server/interfaces/api/requestInterfaces';
 import type { MovieDetails } from '@server/models/Movie';
 import type { TvDetails } from '@server/models/Tv';
 import axios from 'axios';
@@ -59,7 +60,7 @@ const RequestCardPlaceholder = () => {
 };
 
 interface RequestCardErrorProps {
-  requestData?: NonFunctionProperties<MediaRequest>;
+  requestData?: NonFunctionProperties<MediaRequest> & { enhancedStatus?: EnhancedStatus };
 }
 
 const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
@@ -147,6 +148,7 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
                           requestData.is4k ? 'status4k' : 'status'
                         ]
                       }
+                      enhancedStatus={requestData.enhancedStatus}
                       downloadItem={
                         requestData.media[
                           requestData.is4k
@@ -213,7 +215,7 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
 };
 
 interface RequestCardProps {
-  request: NonFunctionProperties<MediaRequest>;
+  request: NonFunctionProperties<MediaRequest> & { enhancedStatus?: EnhancedStatus };
   onTitleData?: (requestId: number, title: MovieDetails | TvDetails) => void;
 }
 
@@ -238,7 +240,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
     data: requestData,
     error: requestError,
     mutate: revalidate,
-  } = useSWR<NonFunctionProperties<MediaRequest>>(
+  } = useSWR<NonFunctionProperties<MediaRequest> & { enhancedStatus?: EnhancedStatus }>(
     `/api/v1/request/${request.id}`,
     {
       fallbackData: request,
@@ -445,6 +447,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 status={
                   requestData.media[requestData.is4k ? 'status4k' : 'status']
                 }
+                enhancedStatus={requestData.enhancedStatus}
                 downloadItem={
                   requestData.media[
                     requestData.is4k ? 'downloadStatus4k' : 'downloadStatus'

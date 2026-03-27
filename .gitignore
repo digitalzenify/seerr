@@ -75,3 +75,4 @@ config/cache
 
 # Docker compose
 compose.override.yaml
+report.xml

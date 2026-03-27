@@ -9,6 +9,7 @@ import defineMessages from '@app/utils/defineMessages';
 import { MediaStatus } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
+import type { EnhancedStatus } from '@server/lib/enhancedStatus';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.StatusBadge', {
@@ -23,6 +24,7 @@ const messages = defineMessages('components.StatusBadge', {
 
 interface StatusBadgeProps {
   status?: MediaStatus;
+  enhancedStatus?: EnhancedStatus;
   downloadItem?: DownloadingItem[];
   is4k?: boolean;
   inProgress?: boolean;
@@ -35,6 +37,7 @@ interface StatusBadgeProps {
 
 const StatusBadge = ({
   status,
+  enhancedStatus,
   downloadItem = [],
   is4k = false,
   inProgress = false,
@@ -151,6 +154,117 @@ const StatusBadge = ({
       }}
     />
   );
+
+  // ── Enhanced status rendering ──────────────────────────────────────────
+  // When the API provides a computed enhancedStatus we use it to show a
+  // richer, user-friendly label instead of the raw MediaStatus enum name.
+  // We only activate this path for statuses that differ from the existing
+  // behavior to keep the change minimal. Available / Partially Available
+  // continue to fall through to the switch below so their links still work.
+  if (
+    enhancedStatus &&
+    enhancedStatus.status !== 'available' &&
+    enhancedStatus.status !== 'partially_available'
+  ) {
+    const labelText = is4k
+      ? intl.formatMessage(messages.status4k, { status: enhancedStatus.label })
+      : enhancedStatus.label;
+
+    switch (enhancedStatus.status) {
+      case 'downloading':
+        return (
+          <Tooltip
+            content={inProgress ? tooltipContent : mediaLinkDescription}
+            className={`${
+              inProgress && 'hidden max-h-96 w-96 overflow-y-auto sm:block'
+            }`}
+            tooltipConfig={{
+              ...(inProgress && { interactive: true, delayHide: 100 }),
+            }}
+          >
+            <Badge
+              badgeType="primary"
+              href={mediaLink}
+              className="relative !bg-gray-700/80 !px-0 overflow-hidden hover:!bg-gray-700"
+            >
+              {badgeDownloadProgress}
+              <div className="relative z-20 flex items-center px-2">
+                <span>{labelText}</span>
+                {mediaType === 'tv' &&
+                  downloadItem[0]?.episode &&
+                  (downloadItem.length > 1 &&
+                  downloadItem.every(
+                    (item) =>
+                      item.downloadId &&
+                      item.downloadId === downloadItem[0].downloadId
+                  ) ? (
+                    <span className="ml-1">
+                      {intl.formatMessage(messages.seasonnumber, {
+                        seasonNumber: downloadItem[0].episode.seasonNumber,
+                      })}
+                    </span>
+                  ) : (
+                    <span className="ml-1">
+                      {intl.formatMessage(messages.seasonepisodenumber, {
+                        seasonNumber: downloadItem[0].episode.seasonNumber,
+                        episodeNumber: downloadItem[0].episode.episodeNumber,
+                      })}
+                    </span>
+                  ))}
+                <Spinner className="ml-1 h-3 w-3" />
+              </div>
+            </Badge>
+          </Tooltip>
+        );
+
+      case 'importing':
+        return (
+          <Tooltip content={mediaLinkDescription}>
+            <Badge badgeType="primary" href={mediaLink}>
+              {labelText}
+            </Badge>
+          </Tooltip>
+        );
+
+      case 'waiting_for_release':
+        return (
+          <Tooltip content={mediaLinkDescription}>
+            <Badge badgeType="primary" href={mediaLink}>
+              {labelText}
+            </Badge>
+          </Tooltip>
+        );
+
+      case 'waiting_for_match':
+        return (
+          <Tooltip content={mediaLinkDescription}>
+            <Badge badgeType="warning" href={mediaLink}>
+              {labelText}
+            </Badge>
+          </Tooltip>
+        );
+
+      case 'attention_needed':
+        return (
+          <Tooltip content={mediaLinkDescription}>
+            <Badge badgeType="danger" href={mediaLink}>
+              {labelText}
+            </Badge>
+          </Tooltip>
+        );
+
+      case 'requested':
+      default:
+        return (
+          <Tooltip content={mediaLinkDescription}>
+            <Badge badgeType="warning" href={mediaLink}>
+              {labelText}
+            </Badge>
+          </Tooltip>
+        );
+    }
+  }
+  // ── End enhanced status rendering ──────────────────────────────────────
 
   switch (status) {
     case MediaStatus.AVAILABLE:
