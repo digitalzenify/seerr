@@ -71,6 +71,9 @@ class DownloadTracker {
    * update was more than {@link maxAgeMs} milliseconds ago, a full update is
    * triggered.  Concurrent callers share the same in-flight promise so that
    * we never fire duplicate requests against Radarr / Sonarr.
+   *
+   * @param maxAgeMs  Maximum age of the cache in milliseconds before a
+   *                  refresh is triggered.  Defaults to 30 000 ms (30 s).
    */
   public async updateIfStale(maxAgeMs = 30_000): Promise<void> {
     if (Date.now() - this.lastUpdated <= maxAgeMs) {
