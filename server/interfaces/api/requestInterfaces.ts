@@ -1,11 +1,15 @@
 import type { MediaType } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
+import type { EnhancedStatus } from '@server/lib/enhancedStatus';
 import type { NonFunctionProperties, PaginatedResponse } from './common';
+
+export type { EnhancedStatus };
 
 export interface RequestResultsResponse extends PaginatedResponse {
   results: (NonFunctionProperties<MediaRequest> & {
     profileName?: string;
     canRemove?: boolean;
+    enhancedStatus?: EnhancedStatus;
   })[];
   serviceErrors: {
     radarr: { id: number; name: string }[];

@@ -17,6 +17,10 @@ export interface DownloadingItem {
   size: number;
   sizeLeft: number;
   status: string;
+  /** Radarr/Sonarr trackedDownloadStatus: 'ok' | 'warning' | 'error' */
+  trackedDownloadStatus: string;
+  /** Radarr/Sonarr trackedDownloadState, e.g. 'downloading', 'importPending', 'importing', 'imported' */
+  trackedDownloadState: string;
   timeLeft: string;
   estimatedCompletionTime: Date;
   title: string;
@@ -96,6 +100,8 @@ class DownloadTracker {
               size: item.size,
               sizeLeft: item.sizeleft,
               status: item.status,
+              trackedDownloadStatus: item.trackedDownloadStatus,
+              trackedDownloadState: item.trackedDownloadState,
               timeLeft: item.timeleft,
               title: item.title,
               downloadId: item.downloadId,
@@ -174,6 +180,8 @@ class DownloadTracker {
               size: item.size,
               sizeLeft: item.sizeleft,
               status: item.status,
+              trackedDownloadStatus: item.trackedDownloadStatus,
+              trackedDownloadState: item.trackedDownloadState,
               timeLeft: item.timeleft,
               title: item.title,
               episode: item.episode,
