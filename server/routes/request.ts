@@ -21,6 +21,7 @@ import type {
   MediaRequestBody,
   RequestResultsResponse,
 } from '@server/interfaces/api/requestInterfaces';
+import { computeEnhancedStatus } from '@server/lib/enhancedStatus';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -267,6 +268,18 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
         });
       }
 
+      // add enhanced status to each request
+      mappedRequests = mappedRequests.map((r) => {
+        const mediaStatus = r.is4k ? r.media.status4k : r.media.status;
+        const downloads = r.is4k
+          ? (r.media.downloadStatus4k ?? [])
+          : (r.media.downloadStatus ?? []);
+        return {
+          ...r,
+          enhancedStatus: computeEnhancedStatus(r.status, mediaStatus, downloads),
+        };
+      });
+
       return res.status(200).json({
         pageInfo: {
           pages: Math.ceil(requestCount / pageSize),
@@ -447,7 +460,16 @@ requestRoutes.get('/:requestId', async (req, res, next) => {
       });
     }
 
-    return res.status(200).json(request);
+    return res.status(200).json({
+      ...request,
+      enhancedStatus: computeEnhancedStatus(
+        request.status,
+        request.is4k ? request.media.status4k : request.media.status,
+        request.is4k
+          ? (request.media.downloadStatus4k ?? [])
+          : (request.media.downloadStatus ?? [])
+      ),
+    });
   } catch (e) {
     logger.debug('Failed to retrieve request.', {
       label: 'API',
