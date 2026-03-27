@@ -94,9 +94,9 @@ class DownloadTracker {
           // /command) does NOT prevent the queue from being fetched below.
           try {
             await radarr.refreshMonitoredDownloads();
-          } catch {
+          } catch (e) {
             logger.warn(
-              `Unable to refresh monitored downloads for Radarr server: ${server.name}`,
+              `Unable to refresh monitored downloads for Radarr server: ${server.name}. Queue will still be fetched. Cause: ${e.message}`,
               { label: 'Download Tracker' }
             );
           }
@@ -185,9 +185,9 @@ class DownloadTracker {
           // /command) does NOT prevent the queue from being fetched below.
           try {
             await sonarr.refreshMonitoredDownloads();
-          } catch {
+          } catch (e) {
             logger.warn(
-              `Unable to refresh monitored downloads for Sonarr server: ${server.name}`,
+              `Unable to refresh monitored downloads for Sonarr server: ${server.name}. Queue will still be fetched. Cause: ${e.message}`,
               { label: 'Download Tracker' }
             );
           }
