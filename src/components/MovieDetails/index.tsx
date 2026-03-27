@@ -49,8 +49,9 @@ import {
 } from '@heroicons/react/24/solid';
 import { type RatingResponse } from '@server/api/ratings';
 import { IssueStatus } from '@server/constants/issue';
-import { MediaStatus, MediaType } from '@server/constants/media';
+import { MediaRequestStatus, MediaStatus, MediaType } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
+import { computeEnhancedStatus } from '@server/lib/enhancedStatus';
 import type { MovieDetails as MovieDetailsType } from '@server/models/Movie';
 import axios from 'axios';
 import { countries } from 'country-flag-icons';
@@ -183,6 +184,35 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
 
   const showAllStudios = data.productionCompanies.length <= minStudios + 1;
   const mediaLinks: PlayButtonLink[] = [];
+
+  // Compute enhanced status for the status badges from the current request data
+  const activeRequest = data.mediaInfo?.requests?.find(
+    (r) =>
+      !r.is4k &&
+      r.status !== MediaRequestStatus.DECLINED &&
+      r.status !== MediaRequestStatus.COMPLETED
+  );
+  const enhancedStatus = activeRequest
+    ? computeEnhancedStatus(
+        activeRequest.status,
+        data.mediaInfo?.status ?? MediaStatus.UNKNOWN,
+        data.mediaInfo?.downloadStatus ?? []
+      )
+    : undefined;
+
+  const activeRequest4k = data.mediaInfo?.requests?.find(
+    (r) =>
+      r.is4k &&
+      r.status !== MediaRequestStatus.DECLINED &&
+      r.status !== MediaRequestStatus.COMPLETED
+  );
+  const enhancedStatus4k = activeRequest4k
+    ? computeEnhancedStatus(
+        activeRequest4k.status,
+        data.mediaInfo?.status4k ?? MediaStatus.UNKNOWN,
+        data.mediaInfo?.downloadStatus4k ?? []
+      )
+    : undefined;
 
   if (
     plexUrl &&
@@ -506,6 +536,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
           <div className="media-status">
             <StatusBadge
               status={data.mediaInfo?.status}
+              enhancedStatus={enhancedStatus}
               downloadItem={data.mediaInfo?.downloadStatus}
               title={data.title}
               inProgress={(data.mediaInfo?.downloadStatus ?? []).length > 0}
@@ -527,6 +558,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
               ) && (
                 <StatusBadge
                   status={data.mediaInfo?.status4k}
+                  enhancedStatus={enhancedStatus4k}
                   downloadItem={data.mediaInfo?.downloadStatus4k}
                   title={data.title}
                   is4k
