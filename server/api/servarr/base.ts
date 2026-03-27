@@ -163,16 +163,37 @@ class ServarrBase<QueueItemAppendT> extends ExternalAPI {
 
   public getQueue = async (): Promise<(QueueItem & QueueItemAppendT)[]> => {
     try {
-      const response = await this.axios.get<QueueResponse<QueueItemAppendT>>(
-        `/queue`,
-        {
-          params: {
-            includeEpisode: true,
-          },
-        }
-      );
+      const pageSize = 500;
+      const allRecords: (QueueItem & QueueItemAppendT)[] = [];
+      let page = 1;
 
-      return response.data.records;
+      while (true) {
+        const response = await this.axios.get<QueueResponse<QueueItemAppendT>>(
+          `/queue`,
+          {
+            params: {
+              includeEpisode: true,
+              pageSize,
+              page,
+            },
+          }
+        );
+
+        const { records, totalRecords } = response.data;
+
+        allRecords.push(...records);
+
+        // Stop when we have collected all records, or when the page returned
+        // no new records (guard against an infinite loop if the server reports
+        // a totalRecords that doesn't match what it actually serves).
+        if (allRecords.length >= totalRecords || records.length === 0) {
+          break;
+        }
+
+        page++;
+      }
+
+      return allRecords;
     } catch (e) {
       throw new Error(
         `[${this.apiName}] Failed to retrieve queue: ${e.message}`,

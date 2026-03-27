@@ -89,8 +89,19 @@ class DownloadTracker {
             url: RadarrAPI.buildUrl(server, '/api/v3'),
           });
 
+          // Refresh monitored downloads in a separate try/catch so that a
+          // failure here (e.g. insufficient API-key permissions to POST to
+          // /command) does NOT prevent the queue from being fetched below.
           try {
             await radarr.refreshMonitoredDownloads();
+          } catch {
+            logger.warn(
+              `Unable to refresh monitored downloads for Radarr server: ${server.name}`,
+              { label: 'Download Tracker' }
+            );
+          }
+
+          try {
             const queueItems = await radarr.getQueue();
 
             this.radarrServers[server.id] = queueItems.map((item) => ({
@@ -169,8 +180,19 @@ class DownloadTracker {
             url: SonarrAPI.buildUrl(server, '/api/v3'),
           });
 
+          // Refresh monitored downloads in a separate try/catch so that a
+          // failure here (e.g. insufficient API-key permissions to POST to
+          // /command) does NOT prevent the queue from being fetched below.
           try {
             await sonarr.refreshMonitoredDownloads();
+          } catch {
+            logger.warn(
+              `Unable to refresh monitored downloads for Sonarr server: ${server.name}`,
+              { label: 'Download Tracker' }
+            );
+          }
+
+          try {
             const queueItems = await sonarr.getQueue();
 
             this.sonarrServers[server.id] = queueItems.map((item) => ({
