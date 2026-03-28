@@ -83,6 +83,34 @@ const MediaSlider = ({
     );
   }
 
+  // Collect TMDB IDs for rating batch fetch (must be before any conditional returns to satisfy Rules of Hooks)
+  const movieIds = titles
+    .slice(0, 20)
+    .filter((t): t is MovieResult => t.mediaType === 'movie')
+    .map((t) => t.id);
+  const tvIds = titles
+    .slice(0, 20)
+    .filter((t): t is TvResult => t.mediaType === 'tv')
+    .map((t) => t.id);
+
+  // Batch fetch IMDB + RT ratings (separate calls for movies and tv)
+  const { data: movieRatings } = useSWR<
+    Record<number, { imdbRating?: number; rtCriticsRating?: string; rtCriticsScore?: number }>
+  >(
+    movieIds.length > 0
+      ? `/api/v1/discover/ratings?tmdbIds=${movieIds.join(',')}&mediaType=movie`
+      : null
+  );
+  const { data: tvRatings } = useSWR<
+    Record<number, { imdbRating?: number; rtCriticsRating?: string; rtCriticsScore?: number }>
+  >(
+    tvIds.length > 0
+      ? `/api/v1/discover/ratings?tmdbIds=${tvIds.join(',')}&mediaType=tv`
+      : null
+  );
+
+  const discoverRatings = { ...movieRatings, ...tvRatings };
+
   useEffect(() => {
     if (
       titles.length < 24 &&
@@ -102,34 +130,6 @@ const MediaSlider = ({
   if (hideWhenEmpty && (data?.[0].results ?? []).length === 0) {
     return null;
   }
-
-  // Collect TMDB IDs for IMDB rating batch fetch
-  const movieIds = titles
-    .slice(0, 20)
-    .filter((t): t is MovieResult => t.mediaType === 'movie')
-    .map((t) => t.id);
-  const tvIds = titles
-    .slice(0, 20)
-    .filter((t): t is TvResult => t.mediaType === 'tv')
-    .map((t) => t.id);
-
-  // Batch fetch IMDB ratings (separate calls for movies and tv)
-  const { data: movieRatings } = useSWR<
-    Record<number, { imdbRating?: number }>
-  >(
-    movieIds.length > 0
-      ? `/api/v1/discover/ratings?tmdbIds=${movieIds.join(',')}&mediaType=movie`
-      : null
-  );
-  const { data: tvRatings } = useSWR<
-    Record<number, { imdbRating?: number }>
-  >(
-    tvIds.length > 0
-      ? `/api/v1/discover/ratings?tmdbIds=${tvIds.join(',')}&mediaType=tv`
-      : null
-  );
-
-  const imdbRatings = { ...movieRatings, ...tvRatings };
 
   const blocklistVisibility = hasPermission(
     [Permission.MANAGE_BLOCKLIST, Permission.VIEW_BLOCKLIST],
@@ -159,7 +159,9 @@ const MediaSlider = ({
               summary={title.overview}
               title={title.title}
               userScore={title.voteAverage}
-              imdbRating={imdbRatings[title.id]?.imdbRating}
+              imdbRating={discoverRatings[title.id]?.imdbRating}
+              rtCriticsRating={discoverRatings[title.id]?.rtCriticsRating}
+              rtCriticsScore={discoverRatings[title.id]?.rtCriticsScore}
               year={title.releaseDate}
               mediaType={title.mediaType}
               inProgress={(title.mediaInfo?.downloadStatus ?? []).length > 0}
@@ -176,7 +178,9 @@ const MediaSlider = ({
               summary={title.overview}
               title={title.name}
               userScore={title.voteAverage}
-              imdbRating={imdbRatings[title.id]?.imdbRating}
+              imdbRating={discoverRatings[title.id]?.imdbRating}
+              rtCriticsRating={discoverRatings[title.id]?.rtCriticsRating}
+              rtCriticsScore={discoverRatings[title.id]?.rtCriticsScore}
               year={title.firstAirDate}
               mediaType={title.mediaType}
               inProgress={(title.mediaInfo?.downloadStatus ?? []).length > 0}
