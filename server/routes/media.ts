@@ -18,10 +18,75 @@ import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import axios from 'axios';
 import { Router } from 'express';
+import path from 'path';
 import type { FindOneOptions } from 'typeorm';
 import { In, IsNull, Not } from 'typeorm';
 
 const mediaRoutes = Router();
+
+/** Map ISO 639-2/B (3-letter) language codes to ISO 639-1 (2-letter). */
+const langCodeMap: Record<string, string> = {
+  eng: 'en',
+  rum: 'ro',
+  ron: 'ro',
+  fre: 'fr',
+  fra: 'fr',
+  ger: 'de',
+  deu: 'de',
+  spa: 'es',
+  ita: 'it',
+  por: 'pt',
+  dut: 'nl',
+  nld: 'nl',
+  pol: 'pl',
+  hun: 'hu',
+  cze: 'cs',
+  ces: 'cs',
+  swe: 'sv',
+  dan: 'da',
+  nor: 'no',
+  fin: 'fi',
+  tur: 'tr',
+  ara: 'ar',
+  jpn: 'ja',
+  kor: 'ko',
+  chi: 'zh',
+  zho: 'zh',
+  hin: 'hi',
+  rus: 'ru',
+  ukr: 'uk',
+  bul: 'bg',
+  hrv: 'hr',
+  srp: 'sr',
+  slv: 'sl',
+  tha: 'th',
+  vie: 'vi',
+  ind: 'id',
+  may: 'ms',
+  msa: 'ms',
+  gre: 'el',
+  ell: 'el',
+  heb: 'he',
+};
+
+/**
+ * Get the 2-letter language code for a subtitle file extension.
+ * Falls back to the original code if no mapping is found.
+ */
+function getSubtitleLangCode(lang3: string): string {
+  return langCodeMap[lang3] ?? lang3;
+}
+
+/**
+ * Extract the base filename (without extension) from a Jellyfin media source path.
+ * Falls back to an empty string if the path is not available.
+ */
+function getVideoBaseName(mediaSourcePath?: string): string {
+  if (!mediaSourcePath) return '';
+  const basename = path.basename(mediaSourcePath);
+  const ext = path.extname(basename);
+  return ext ? basename.slice(0, -ext.length) : basename;
+}
 
 mediaRoutes.get('/', async (req, res, next) => {
   const mediaRepository = getRepository(Media);
@@ -632,10 +697,17 @@ mediaRoutes.get<{ id: string; language: string }>(
         responseType: 'stream',
       });
 
+      // Name the subtitle after the video file so players auto-detect it
+      const videoBase = getVideoBaseName(mediaSource.Path);
+      const langCode = getSubtitleLangCode(lang);
+      const subtitleFilename = videoBase
+        ? `${videoBase}.${langCode}.srt`
+        : `subtitle-${langCode}.srt`;
+
       res.setHeader('Content-Type', 'text/srt; charset=utf-8');
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="subtitle-${lang}.srt"`
+        `attachment; filename="${subtitleFilename}"`
       );
 
       subtitleResponse.data.pipe(res);
@@ -816,13 +888,17 @@ mediaRoutes.get<{
         responseType: 'stream',
       });
 
+      // Name the subtitle after the video file so players auto-detect it
+      const videoBase = getVideoBaseName(mediaSource.Path);
+      const langCode = getSubtitleLangCode(lang);
+      const subtitleFilename = videoBase
+        ? `${videoBase}.${langCode}.srt`
+        : `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}.${langCode}.srt`;
+
       res.setHeader('Content-Type', 'text/srt; charset=utf-8');
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="S${String(seasonNumber).padStart(
-          2,
-          '0'
-        )}E${String(episodeNumber).padStart(2, '0')}-${lang}.srt"`
+        `attachment; filename="${subtitleFilename}"`
       );
 
       subtitleResponse.data.pipe(res);

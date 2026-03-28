@@ -51,13 +51,23 @@ const EpisodeDownloadButtons = ({
         return;
       }
 
+      // Extract filename from Content-Disposition header if available
+      const disposition = response.headers.get('content-disposition');
+      let filename = `S${String(seasonNumber).padStart(2, '0')}E${String(
+        episodeNumber
+      ).padStart(2, '0')}-${language}.srt`;
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match?.[1]) {
+          filename = match[1];
+        }
+      }
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `S${String(seasonNumber).padStart(2, '0')}E${String(
-        episodeNumber
-      ).padStart(2, '0')}-${language}.srt`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

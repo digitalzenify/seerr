@@ -1,4 +1,6 @@
 import Spinner from '@app/assets/spinner.svg';
+import ImdbLogo from '@app/assets/services/imdb.svg';
+import TmdbLogo from '@app/assets/tmdb_logo.svg';
 import BlocklistModal from '@app/components/BlocklistModal';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
@@ -37,6 +39,7 @@ interface TitleCardProps {
   year?: string;
   title: string;
   userScore?: number;
+  imdbRating?: number;
   mediaType: MediaType;
   status?: MediaStatus;
   canExpand?: boolean;
@@ -61,6 +64,8 @@ const TitleCard = ({
   summary,
   year,
   title,
+  userScore,
+  imdbRating,
   status,
   mediaType,
   isAddedToWatchlist = false,
@@ -537,6 +542,24 @@ const TitleCard = ({
           </Transition>
         </div>
       </div>
+      {(userScore != null && userScore > 0) || imdbRating != null ? (
+        <div className="mt-1 flex items-center justify-center gap-2.5 text-xs text-gray-300">
+          {userScore != null && userScore > 0 && (
+            <div className="flex items-center gap-0.5">
+              <TmdbLogo className="w-4 shrink-0" />
+              <span className="font-semibold">
+                {Math.round(userScore * 10)}%
+              </span>
+            </div>
+          )}
+          {imdbRating != null && (
+            <div className="flex items-center gap-0.5">
+              <ImdbLogo className="w-4 shrink-0" />
+              <span className="font-semibold">{imdbRating.toFixed(1)}</span>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 };
