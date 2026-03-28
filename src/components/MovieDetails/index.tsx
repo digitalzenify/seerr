@@ -134,19 +134,38 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
   const [showBlocklistModal, setShowBlocklistModal] = useState(false);
   const { addToast } = useToasts();
 
+  const [refreshInterval, setRefreshInterval] = useState(
+    refreshIntervalHelper(
+      {
+        downloadStatus: movie?.mediaInfo?.downloadStatus,
+        downloadStatus4k: movie?.mediaInfo?.downloadStatus4k,
+        status: movie?.mediaInfo?.status,
+        status4k: movie?.mediaInfo?.status4k,
+      },
+      15000
+    )
+  );
+
   const {
     data,
     error,
     mutate: revalidate,
   } = useSWR<MovieDetailsType>(`/api/v1/movie/${router.query.movieId}`, {
     fallbackData: movie,
-    refreshInterval: refreshIntervalHelper(
-      {
-        downloadStatus: movie?.mediaInfo?.downloadStatus,
-        downloadStatus4k: movie?.mediaInfo?.downloadStatus4k,
-      },
-      15000
-    ),
+    refreshInterval,
+    onSuccess: (fetchedData) => {
+      setRefreshInterval(
+        refreshIntervalHelper(
+          {
+            downloadStatus: fetchedData?.mediaInfo?.downloadStatus,
+            downloadStatus4k: fetchedData?.mediaInfo?.downloadStatus4k,
+            status: fetchedData?.mediaInfo?.status,
+            status4k: fetchedData?.mediaInfo?.status4k,
+          },
+          15000
+        )
+      );
+    },
   });
 
   const { data: ratingData } = useSWR<RatingResponse>(

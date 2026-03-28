@@ -130,19 +130,38 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
   const [showBlocklistModal, setShowBlocklistModal] = useState(false);
   const { addToast } = useToasts();
 
+  const [refreshInterval, setRefreshInterval] = useState(
+    refreshIntervalHelper(
+      {
+        downloadStatus: tv?.mediaInfo?.downloadStatus,
+        downloadStatus4k: tv?.mediaInfo?.downloadStatus4k,
+        status: tv?.mediaInfo?.status,
+        status4k: tv?.mediaInfo?.status4k,
+      },
+      15000
+    )
+  );
+
   const {
     data,
     error,
     mutate: revalidate,
   } = useSWR<TvDetailsType>(`/api/v1/tv/${router.query.tvId}`, {
     fallbackData: tv,
-    refreshInterval: refreshIntervalHelper(
-      {
-        downloadStatus: tv?.mediaInfo?.downloadStatus,
-        downloadStatus4k: tv?.mediaInfo?.downloadStatus4k,
-      },
-      15000
-    ),
+    refreshInterval,
+    onSuccess: (fetchedData) => {
+      setRefreshInterval(
+        refreshIntervalHelper(
+          {
+            downloadStatus: fetchedData?.mediaInfo?.downloadStatus,
+            downloadStatus4k: fetchedData?.mediaInfo?.downloadStatus4k,
+            status: fetchedData?.mediaInfo?.status,
+            status4k: fetchedData?.mediaInfo?.status4k,
+          },
+          15000
+        )
+      );
+    },
   });
 
   const { data: ratingData } = useSWR<RTRating>(
