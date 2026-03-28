@@ -1129,6 +1129,16 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                             <Season
                               tvId={data.id}
                               seasonNumber={season.seasonNumber}
+                              mediaId={data.mediaInfo?.id}
+                              isAvailable={
+                                mSeason?.status === MediaStatus.AVAILABLE ||
+                                mSeason?.status ===
+                                  MediaStatus.PARTIALLY_AVAILABLE ||
+                                data.mediaInfo?.status ===
+                                  MediaStatus.AVAILABLE ||
+                                data.mediaInfo?.status ===
+                                  MediaStatus.PARTIALLY_AVAILABLE
+                              }
                             />
                           </Disclosure.Panel>
                         </Transition>

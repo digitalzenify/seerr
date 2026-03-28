@@ -644,4 +644,191 @@ mediaRoutes.get<{ id: string; language: string }>(
   }
 );
 
+/**
+ * GET /media/:id/episode/:seasonNumber/:episodeNumber/download
+ * Download a specific TV episode from Jellyfin.
+ */
+mediaRoutes.get<{
+  id: string;
+  seasonNumber: string;
+  episodeNumber: string;
+}>(
+  '/:id/episode/:seasonNumber/:episodeNumber/download',
+  isAuthenticated(),
+  async (req, res, next) => {
+    try {
+      const jf = getJellyfinConnection();
+      if (!jf) {
+        return next({ status: 500, message: 'Jellyfin is not configured.' });
+      }
+
+      const media = await getRepository(Media).findOne({
+        where: { id: Number(req.params.id) },
+      });
+      if (!media) {
+        return next({ status: 404, message: 'Media not found.' });
+      }
+
+      const jellyfinId = media.jellyfinMediaId;
+      if (!jellyfinId) {
+        return next({ status: 404, message: 'This media has no Jellyfin ID.' });
+      }
+
+      const seasonNumber = Number(req.params.seasonNumber);
+      const episodeNumber = Number(req.params.episodeNumber);
+
+      // Find the episode in Jellyfin
+      const episodesUrl = `${jf.baseUrl}/Shows/${encodeURIComponent(
+        jellyfinId
+      )}/Episodes?season=${seasonNumber}&fields=MediaSources&api_key=${encodeURIComponent(
+        jf.apiKey
+      )}`;
+      const episodesResponse = await axios.get(episodesUrl);
+      const episode = episodesResponse.data.Items?.find(
+        (ep: { IndexNumber?: number; ParentIndexNumber?: number }) =>
+          ep.IndexNumber === episodeNumber &&
+          ep.ParentIndexNumber === seasonNumber
+      );
+
+      if (!episode) {
+        return next({ status: 404, message: 'Episode not found in Jellyfin.' });
+      }
+
+      const downloadUrl = `${jf.baseUrl}/Items/${encodeURIComponent(
+        episode.Id
+      )}/Download?api_key=${encodeURIComponent(jf.apiKey)}`;
+
+      const response = await axios.get(downloadUrl, {
+        responseType: 'stream',
+        timeout: 0,
+      });
+
+      const contentType =
+        response.headers['content-type'] ?? 'application/octet-stream';
+      const contentLength = response.headers['content-length'];
+      const contentDisposition = response.headers['content-disposition'];
+
+      res.setHeader('Content-Type', contentType);
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+      if (contentDisposition) {
+        res.setHeader('Content-Disposition', contentDisposition);
+      } else {
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="S${String(seasonNumber).padStart(
+            2,
+            '0'
+          )}E${String(episodeNumber).padStart(2, '0')}.mkv"`
+        );
+      }
+
+      response.data.pipe(res);
+    } catch (e) {
+      logger.error('Failed to proxy episode download', {
+        label: 'Media',
+        message: e.message,
+      });
+      next({ status: 500, message: 'Failed to download episode.' });
+    }
+  }
+);
+
+/**
+ * GET /media/:id/episode/:seasonNumber/:episodeNumber/subtitle/:language/download
+ * Download a subtitle for a specific TV episode from Jellyfin.
+ */
+mediaRoutes.get<{
+  id: string;
+  seasonNumber: string;
+  episodeNumber: string;
+  language: string;
+}>(
+  '/:id/episode/:seasonNumber/:episodeNumber/subtitle/:language/download',
+  isAuthenticated(),
+  async (req, res, next) => {
+    try {
+      const jf = getJellyfinConnection();
+      if (!jf) {
+        return next({ status: 500, message: 'Jellyfin is not configured.' });
+      }
+
+      const media = await getRepository(Media).findOne({
+        where: { id: Number(req.params.id) },
+      });
+      if (!media) {
+        return next({ status: 404, message: 'Media not found.' });
+      }
+
+      const jellyfinId = media.jellyfinMediaId;
+      if (!jellyfinId) {
+        return next({ status: 404, message: 'This media has no Jellyfin ID.' });
+      }
+
+      const seasonNumber = Number(req.params.seasonNumber);
+      const episodeNumber = Number(req.params.episodeNumber);
+      const lang = req.params.language.toLowerCase();
+
+      // Find the episode in Jellyfin
+      const episodesUrl = `${jf.baseUrl}/Shows/${encodeURIComponent(
+        jellyfinId
+      )}/Episodes?season=${seasonNumber}&fields=MediaSources&api_key=${encodeURIComponent(
+        jf.apiKey
+      )}`;
+      const episodesResponse = await axios.get(episodesUrl);
+      const episode = episodesResponse.data.Items?.find(
+        (ep: { IndexNumber?: number; ParentIndexNumber?: number }) =>
+          ep.IndexNumber === episodeNumber &&
+          ep.ParentIndexNumber === seasonNumber
+      );
+
+      if (!episode?.MediaSources?.length) {
+        return next({ status: 404, message: 'Episode not found.' });
+      }
+
+      const mediaSource = episode.MediaSources[0];
+      const subtitleStream = mediaSource.MediaStreams?.find(
+        (stream: { Type: string; Language?: string }) =>
+          stream.Type === 'Subtitle' &&
+          stream.Language?.toLowerCase() === lang
+      );
+
+      if (!subtitleStream) {
+        return next({
+          status: 404,
+          message: `No ${lang} subtitle found for this episode.`,
+        });
+      }
+
+      const subtitleUrl = `${jf.baseUrl}/Videos/${encodeURIComponent(
+        episode.Id
+      )}/${encodeURIComponent(
+        mediaSource.Id
+      )}/Subtitles/${subtitleStream.Index}/0/Stream.srt?api_key=${encodeURIComponent(
+        jf.apiKey
+      )}`;
+
+      const subtitleResponse = await axios.get(subtitleUrl, {
+        responseType: 'stream',
+      });
+
+      res.setHeader('Content-Type', 'text/srt; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="S${String(seasonNumber).padStart(
+          2,
+          '0'
+        )}E${String(episodeNumber).padStart(2, '0')}-${lang}.srt"`
+      );
+
+      subtitleResponse.data.pipe(res);
+    } catch (e) {
+      logger.error('Failed to download episode subtitle', {
+        label: 'Media',
+        message: e.message,
+      });
+      next({ status: 500, message: 'Failed to download subtitle.' });
+    }
+  }
+);
+
 export default mediaRoutes;

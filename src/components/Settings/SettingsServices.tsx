@@ -6,6 +6,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
+import BazarrModal from '@app/components/Settings/BazarrModal';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
 import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRuleTiles';
 import RadarrModal from '@app/components/Settings/RadarrModal';
@@ -16,7 +17,11 @@ import { Transition } from '@headlessui/react';
 import { PencilIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/solid';
 import type OverrideRule from '@server/entity/OverrideRule';
 import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrideRuleInterfaces';
-import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
+import type {
+  BazarrSettings,
+  RadarrSettings,
+  SonarrSettings,
+} from '@server/lib/settings';
 import axios from 'axios';
 import { Fragment, useState } from 'react';
 import { useIntl } from 'react-intl';
@@ -50,6 +55,11 @@ const messages = defineMessages('components.Settings', {
   overrideRulesDescription:
     'Override rules allow you to specify properties that will be replaced if a request matches the rule.',
   addrule: 'New Override Rule',
+  bazarrsettings: 'Bazarr Settings',
+  bazarrSettingsDescription:
+    'Configure your Bazarr server below to enable subtitle downloading directly from Seer.',
+  addbazarr: 'Add Bazarr Server',
+  deleteBazarrConfirm: 'Are you sure you want to delete this Bazarr server?',
 });
 
 interface ServerInstanceProps {
@@ -215,6 +225,11 @@ const SettingsServices = () => {
     error: sonarrError,
     mutate: revalidateSonarr,
   } = useSWR<SonarrSettings[]>('/api/v1/settings/sonarr');
+  const {
+    data: bazarrData,
+    error: bazarrError,
+    mutate: revalidateBazarr,
+  } = useSWR<BazarrSettings[]>('/api/v1/settings/bazarr');
   const { data: rules, mutate: revalidate } =
     useSWR<OverrideRuleResultsResponse>('/api/v1/overrideRule');
   const [editRadarrModal, setEditRadarrModal] = useState<{
@@ -231,9 +246,16 @@ const SettingsServices = () => {
     open: false,
     sonarr: null,
   });
+  const [editBazarrModal, setEditBazarrModal] = useState<{
+    open: boolean;
+    bazarr: BazarrSettings | null;
+  }>({
+    open: false,
+    bazarr: null,
+  });
   const [deleteServerModal, setDeleteServerModal] = useState<{
     open: boolean;
-    type: 'radarr' | 'sonarr';
+    type: 'radarr' | 'sonarr' | 'bazarr';
     serverId: number | null;
   }>({
     open: false,
@@ -255,6 +277,7 @@ const SettingsServices = () => {
     setDeleteServerModal({ open: false, serverId: null, type: 'radarr' });
     revalidateRadarr();
     revalidateSonarr();
+    revalidateBazarr();
     mutate('/api/v1/settings/public');
   };
 
@@ -304,6 +327,18 @@ const SettingsServices = () => {
           }}
         />
       )}
+      {editBazarrModal.open && (
+        <BazarrModal
+          bazarr={editBazarrModal.bazarr}
+          onClose={() =>
+            setEditBazarrModal({ open: false, bazarr: null })
+          }
+          onSave={() => {
+            revalidateBazarr();
+            setEditBazarrModal({ open: false, bazarr: null });
+          }}
+        />
+      )}
       <Transition
         as={Fragment}
         show={deleteServerModal.open}
@@ -327,7 +362,11 @@ const SettingsServices = () => {
           }
           title={intl.formatMessage(messages.deleteServer, {
             serverType:
-              deleteServerModal.type === 'radarr' ? 'Radarr' : 'Sonarr',
+              deleteServerModal.type === 'radarr'
+                ? 'Radarr'
+                : deleteServerModal.type === 'sonarr'
+                  ? 'Sonarr'
+                  : 'Bazarr',
           })}
         >
           {intl.formatMessage(messages.deleteserverconfirm)}
@@ -492,6 +531,100 @@ const SettingsServices = () => {
                   >
                     <PlusIcon />
                     <span>{intl.formatMessage(messages.addsonarr)}</span>
+                  </Button>
+                </div>
+              </li>
+            </ul>
+          </>
+        )}
+      </div>
+      <div className="mb-6 mt-10">
+        <h3 className="heading">
+          {intl.formatMessage(messages.bazarrsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.bazarrSettingsDescription)}
+        </p>
+      </div>
+      <div className="section">
+        {!bazarrData && !bazarrError && <LoadingSpinner />}
+        {bazarrData && !bazarrError && (
+          <>
+            <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              {bazarrData.map((bazarr) => (
+                <li
+                  key={`bazarr-config-${bazarr.id}`}
+                  className="col-span-1 rounded-lg bg-gray-800 shadow ring-1 ring-gray-500"
+                >
+                  <div className="flex w-full items-center justify-between space-x-6 p-6">
+                    <div className="flex-1 truncate">
+                      <div className="mb-2 flex items-center space-x-2">
+                        <h3 className="truncate font-medium leading-5 text-white">
+                          {bazarr.name}
+                        </h3>
+                        {bazarr.useSsl && (
+                          <Badge badgeType="success">
+                            {intl.formatMessage(messages.ssl)}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-1 truncate text-sm leading-5 text-gray-300">
+                        <span className="mr-2 font-bold">
+                          {intl.formatMessage(messages.address)}
+                        </span>
+                        {(bazarr.useSsl ? 'https://' : 'http://') +
+                          bazarr.hostname +
+                          ':' +
+                          String(bazarr.port)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-500">
+                    <div className="-mt-px flex">
+                      <div className="flex w-0 flex-1 border-r border-gray-500">
+                        <button
+                          onClick={() =>
+                            setEditBazarrModal({ open: true, bazarr })
+                          }
+                          className="focus:ring-blue relative -mr-px inline-flex w-0 flex-1 items-center justify-center rounded-bl-lg border border-transparent py-4 text-sm font-medium leading-5 text-gray-200 transition duration-150 ease-in-out hover:text-white focus:z-10 focus:border-gray-500 focus:outline-none"
+                        >
+                          <PencilIcon className="mr-2 h-5 w-5" />
+                          <span>
+                            {intl.formatMessage(globalMessages.edit)}
+                          </span>
+                        </button>
+                      </div>
+                      <div className="-ml-px flex w-0 flex-1">
+                        <button
+                          onClick={() =>
+                            setDeleteServerModal({
+                              open: true,
+                              serverId: bazarr.id,
+                              type: 'bazarr',
+                            })
+                          }
+                          className="focus:ring-blue relative inline-flex w-0 flex-1 items-center justify-center rounded-br-lg border border-transparent py-4 text-sm font-medium leading-5 text-gray-200 transition duration-150 ease-in-out hover:text-white focus:z-10 focus:border-gray-500 focus:outline-none"
+                        >
+                          <TrashIcon className="mr-2 h-5 w-5" />
+                          <span>
+                            {intl.formatMessage(globalMessages.delete)}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    onClick={() =>
+                      setEditBazarrModal({ open: true, bazarr: null })
+                    }
+                  >
+                    <PlusIcon />
+                    <span>{intl.formatMessage(messages.addbazarr)}</span>
                   </Button>
                 </div>
               </li>

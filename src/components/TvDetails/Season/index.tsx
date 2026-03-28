@@ -1,6 +1,7 @@
 import AirDateBadge from '@app/components/AirDateBadge';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import EpisodeDownloadButtons from '@app/components/DownloadButtons/EpisodeDownloadButtons';
 import defineMessages from '@app/utils/defineMessages';
 import type { SeasonWithEpisodes } from '@server/models/Tv';
 import { useIntl } from 'react-intl';
@@ -14,9 +15,11 @@ const messages = defineMessages('components.TvDetails.Season', {
 type SeasonProps = {
   seasonNumber: number;
   tvId: number;
+  mediaId?: number;
+  isAvailable?: boolean;
 };
 
-const Season = ({ seasonNumber, tvId }: SeasonProps) => {
+const Season = ({ seasonNumber, tvId, mediaId, isAvailable }: SeasonProps) => {
   const intl = useIntl();
   const { data, error } = useSWR<SeasonWithEpisodes>(
     `/api/v1/tv/${tvId}/season/${seasonNumber}`
@@ -51,6 +54,13 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
                     </h3>
                     {episode.airDate && (
                       <AirDateBadge airDate={episode.airDate} />
+                    )}
+                    {mediaId && isAvailable && (
+                      <EpisodeDownloadButtons
+                        mediaId={mediaId}
+                        seasonNumber={seasonNumber}
+                        episodeNumber={episode.episodeNumber}
+                      />
                     )}
                   </div>
                   {episode.overview && <p>{episode.overview}</p>}

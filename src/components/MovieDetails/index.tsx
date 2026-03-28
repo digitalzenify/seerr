@@ -14,6 +14,7 @@ import type { PlayButtonLink } from '@app/components/Common/PlayButton';
 import PlayButton from '@app/components/Common/PlayButton';
 import Tag from '@app/components/Common/Tag';
 import Tooltip from '@app/components/Common/Tooltip';
+import DownloadButtons from '@app/components/DownloadButtons';
 import ExternalLinkBlock from '@app/components/ExternalLinkBlock';
 import IssueModal from '@app/components/IssueModal';
 import ManageSlideOver from '@app/components/ManageSlideOver';
@@ -700,6 +701,12 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
                   <ExclamationTriangleIcon />
                 </Button>
               </Tooltip>
+            )}
+          {data.mediaInfo?.id &&
+            data.mediaInfo?.jellyfinMediaId &&
+            (data.mediaInfo?.status === MediaStatus.AVAILABLE ||
+              data.mediaInfo?.status === MediaStatus.PARTIALLY_AVAILABLE) && (
+              <DownloadButtons mediaId={data.mediaInfo.id} />
             )}
           {hasPermission(Permission.MANAGE_REQUESTS) &&
             data.mediaInfo &&
