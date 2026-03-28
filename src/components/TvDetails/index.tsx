@@ -130,19 +130,38 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
   const [showBlocklistModal, setShowBlocklistModal] = useState(false);
   const { addToast } = useToasts();
 
+  const [refreshInterval, setRefreshInterval] = useState(
+    refreshIntervalHelper(
+      {
+        downloadStatus: tv?.mediaInfo?.downloadStatus,
+        downloadStatus4k: tv?.mediaInfo?.downloadStatus4k,
+        status: tv?.mediaInfo?.status,
+        status4k: tv?.mediaInfo?.status4k,
+      },
+      15000
+    )
+  );
+
   const {
     data,
     error,
     mutate: revalidate,
   } = useSWR<TvDetailsType>(`/api/v1/tv/${router.query.tvId}`, {
     fallbackData: tv,
-    refreshInterval: refreshIntervalHelper(
-      {
-        downloadStatus: tv?.mediaInfo?.downloadStatus,
-        downloadStatus4k: tv?.mediaInfo?.downloadStatus4k,
-      },
-      15000
-    ),
+    refreshInterval,
+    onSuccess: (fetchedData) => {
+      setRefreshInterval(
+        refreshIntervalHelper(
+          {
+            downloadStatus: fetchedData?.mediaInfo?.downloadStatus,
+            downloadStatus4k: fetchedData?.mediaInfo?.downloadStatus4k,
+            status: fetchedData?.mediaInfo?.status,
+            status4k: fetchedData?.mediaInfo?.status4k,
+          },
+          15000
+        )
+      );
+    },
   });
 
   const { data: ratingData } = useSWR<RTRating>(
@@ -1110,6 +1129,16 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                             <Season
                               tvId={data.id}
                               seasonNumber={season.seasonNumber}
+                              mediaId={data.mediaInfo?.id}
+                              isAvailable={
+                                mSeason?.status === MediaStatus.AVAILABLE ||
+                                mSeason?.status ===
+                                  MediaStatus.PARTIALLY_AVAILABLE ||
+                                data.mediaInfo?.status ===
+                                  MediaStatus.AVAILABLE ||
+                                data.mediaInfo?.status ===
+                                  MediaStatus.PARTIALLY_AVAILABLE
+                              }
                             />
                           </Disclosure.Panel>
                         </Transition>

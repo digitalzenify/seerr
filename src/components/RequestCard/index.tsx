@@ -236,6 +236,17 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
   const { data: title, error } = useSWR<MovieDetails | TvDetails>(
     inView ? `${url}` : null
   );
+  const [refreshInterval, setRefreshInterval] = useState(
+    refreshIntervalHelper(
+      {
+        downloadStatus: request.media.downloadStatus,
+        downloadStatus4k: request.media.downloadStatus4k,
+        status: request.media.status,
+        status4k: request.media.status4k,
+      },
+      15000
+    )
+  );
   const {
     data: requestData,
     error: requestError,
@@ -244,13 +255,20 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
     `/api/v1/request/${request.id}`,
     {
       fallbackData: request,
-      refreshInterval: refreshIntervalHelper(
-        {
-          downloadStatus: request.media.downloadStatus,
-          downloadStatus4k: request.media.downloadStatus4k,
-        },
-        15000
-      ),
+      refreshInterval,
+      onSuccess: (fetchedData) => {
+        setRefreshInterval(
+          refreshIntervalHelper(
+            {
+              downloadStatus: fetchedData?.media?.downloadStatus,
+              downloadStatus4k: fetchedData?.media?.downloadStatus4k,
+              status: fetchedData?.media?.status,
+              status4k: fetchedData?.media?.status4k,
+            },
+            15000
+          )
+        );
+      },
     }
   );
 

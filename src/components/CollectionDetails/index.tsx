@@ -51,8 +51,29 @@ const CollectionDetails = ({ collection }: CollectionDetailsProps) => {
       ),
     ];
 
-    return { downloadStatus, downloadStatus4k };
+    // If any part is in a transitional state, report it so polling continues
+    const hasTransitional = data?.parts.some(
+      (item) =>
+        item.mediaInfo?.status === MediaStatus.PROCESSING ||
+        item.mediaInfo?.status === MediaStatus.PENDING
+    );
+    const hasTransitional4k = data?.parts.some(
+      (item) =>
+        item.mediaInfo?.status4k === MediaStatus.PROCESSING ||
+        item.mediaInfo?.status4k === MediaStatus.PENDING
+    );
+
+    return {
+      downloadStatus,
+      downloadStatus4k,
+      status: hasTransitional ? MediaStatus.PROCESSING : undefined,
+      status4k: hasTransitional4k ? MediaStatus.PROCESSING : undefined,
+    };
   };
+
+  const [refreshInterval, setRefreshInterval] = useState(
+    refreshIntervalHelper(returnCollectionDownloadItems(collection), 15000)
+  );
 
   const {
     data,
@@ -61,10 +82,15 @@ const CollectionDetails = ({ collection }: CollectionDetailsProps) => {
   } = useSWR<Collection>(`/api/v1/collection/${router.query.collectionId}`, {
     fallbackData: collection,
     revalidateOnMount: true,
-    refreshInterval: refreshIntervalHelper(
-      returnCollectionDownloadItems(collection),
-      15000
-    ),
+    refreshInterval,
+    onSuccess: (fetchedData) => {
+      setRefreshInterval(
+        refreshIntervalHelper(
+          returnCollectionDownloadItems(fetchedData),
+          15000
+        )
+      );
+    },
   });
 
   const { data: genres } =
