@@ -152,7 +152,7 @@ const UserStatistics = () => {
   const isLoading = (!stats && !statsError) || (!user && !userError);
 
   if (userError) {
-    return <ErrorPage statusCode={userError.status} />;
+    return <ErrorPage statusCode={404} />;
   }
 
   if (isLoading || !user) {
