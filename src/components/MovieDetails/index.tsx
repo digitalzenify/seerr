@@ -216,7 +216,8 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
     ? computeEnhancedStatus(
         activeRequest.status,
         data.mediaInfo?.status ?? MediaStatus.UNKNOWN,
-        data.mediaInfo?.downloadStatus ?? []
+        data.mediaInfo?.downloadStatus ?? [],
+        data.mediaInfo?.recentlyDownloaded ?? false
       )
     : undefined;
 
@@ -230,7 +231,8 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
     ? computeEnhancedStatus(
         activeRequest4k.status,
         data.mediaInfo?.status4k ?? MediaStatus.UNKNOWN,
-        data.mediaInfo?.downloadStatus4k ?? []
+        data.mediaInfo?.downloadStatus4k ?? [],
+        data.mediaInfo?.recentlyDownloaded4k ?? false
       )
     : undefined;
 

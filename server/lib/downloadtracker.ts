@@ -34,6 +34,18 @@ class DownloadTracker {
   private lastUpdated = 0;
   private updateInProgress: Promise<void> | null = null;
 
+  /**
+   * Tracks media items whose downloads were recently present in the queue
+   * but have since disappeared — most likely because the import completed.
+   * Key = `${mediaType}:${externalId}`, value = timestamp when the item
+   * was last seen in the queue.  Entries older than
+   * {@link RECENTLY_COMPLETED_TTL_MS} are pruned on every update.
+   */
+  private recentlyCompleted: Map<string, number> = new Map();
+
+  /** How long a "recently completed" entry is kept (5 minutes). */
+  private static readonly RECENTLY_COMPLETED_TTL_MS = 5 * 60 * 1000;
+
   public getMovieProgress(
     serverId: number,
     externalServiceId: number
@@ -63,7 +75,24 @@ class DownloadTracker {
   public async resetDownloadTracker() {
     this.radarrServers = {};
     this.sonarrServers = {};
+    this.recentlyCompleted = new Map();
     this.lastUpdated = 0;
+  }
+
+  /**
+   * Returns true when the given media item was recently tracked in the
+   * download queue but has since disappeared.  This bridges the gap between
+   * the queue item being removed (import finished in *arr) and Seerr
+   * updating the MediaStatus to AVAILABLE.
+   */
+  public wasRecentlyDownloading(
+    mediaType: MediaType,
+    externalId: number
+  ): boolean {
+    const key = `${mediaType}:${externalId}`;
+    const ts = this.recentlyCompleted.get(key);
+    if (ts === undefined) return false;
+    return Date.now() - ts < DownloadTracker.RECENTLY_COMPLETED_TTL_MS;
   }
 
   /**
@@ -89,9 +118,62 @@ class DownloadTracker {
   }
 
   public async updateDownloads() {
+    // Snapshot current externalIds so we can detect items that leave the queue
+    const prevRadarrIds = this.collectExternalIds(this.radarrServers, MediaType.MOVIE);
+    const prevSonarrIds = this.collectExternalIds(this.sonarrServers, MediaType.TV);
+
     await this.updateRadarrDownloads();
     await this.updateSonarrDownloads();
+
+    // Detect items that left the queue → mark them as recently completed
+    const newRadarrIds = this.collectExternalIds(this.radarrServers, MediaType.MOVIE);
+    const newSonarrIds = this.collectExternalIds(this.sonarrServers, MediaType.TV);
+    const now = Date.now();
+
+    for (const key of prevRadarrIds) {
+      if (!newRadarrIds.has(key)) {
+        this.recentlyCompleted.set(key, now);
+      }
+    }
+    for (const key of prevSonarrIds) {
+      if (!newSonarrIds.has(key)) {
+        this.recentlyCompleted.set(key, now);
+      }
+    }
+
+    // Items that are back in the queue should be removed from recently completed
+    for (const key of newRadarrIds) {
+      this.recentlyCompleted.delete(key);
+    }
+    for (const key of newSonarrIds) {
+      this.recentlyCompleted.delete(key);
+    }
+
+    // Prune stale entries
+    const cutoff = now - DownloadTracker.RECENTLY_COMPLETED_TTL_MS;
+    for (const [key, ts] of this.recentlyCompleted) {
+      if (ts < cutoff) {
+        this.recentlyCompleted.delete(key);
+      }
+    }
+
     this.lastUpdated = Date.now();
+  }
+
+  /**
+   * Collect all unique `${mediaType}:${externalId}` keys from a server map.
+   */
+  private collectExternalIds(
+    servers: Record<number, DownloadingItem[]>,
+    mediaType: MediaType
+  ): Set<string> {
+    const ids = new Set<string>();
+    for (const items of Object.values(servers)) {
+      for (const item of items) {
+        ids.add(`${mediaType}:${item.externalId}`);
+      }
+    }
+    return ids;
   }
 
   private async updateRadarrDownloads() {

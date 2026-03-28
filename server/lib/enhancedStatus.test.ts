@@ -185,6 +185,28 @@ describe('computeEnhancedStatus', () => {
     assert.equal(result.label, 'Waiting for Release');
   });
 
+  // ── Recently downloaded → importing (not waiting for release) ──────────
+  it('returns importing when PROCESSING, no downloads, but recently downloaded', () => {
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      noDownloads,
+      true // recentlyDownloaded
+    );
+    assert.equal(result.status, 'importing');
+    assert.equal(result.label, 'Importing');
+  });
+
+  it('returns waiting_for_release when PROCESSING, no downloads, and NOT recently downloaded', () => {
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      noDownloads,
+      false
+    );
+    assert.equal(result.status, 'waiting_for_release');
+  });
+
   // ── Waiting for a match ────────────────────────────────────────────────
   it('returns waiting_for_match when approved and media status is UNKNOWN', () => {
     const result = computeEnhancedStatus(

@@ -616,6 +616,36 @@ components:
         - is4k
         - minimumAvailability
         - isDefault
+    BazarrSettings:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 0
+          readOnly: true
+        name:
+          type: string
+          example: 'Bazarr Main'
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 6767
+        apiKey:
+          type: string
+          example: 'exampleapikey'
+        useSsl:
+          type: boolean
+          example: false
+        baseUrl:
+          type: string
+      required:
+        - name
+        - hostname
+        - port
+        - apiKey
+        - useSsl
     SonarrSettings:
       type: object
       properties:
@@ -2947,6 +2977,130 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SonarrSettings'
+  /settings/bazarr:
+    get:
+      summary: Get Bazarr settings
+      description: Returns all Bazarr settings in a JSON array.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: 'Values were returned'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BazarrSettings'
+    post:
+      summary: Create Bazarr instance
+      description: Creates a new Bazarr instance from the request body.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BazarrSettings'
+      responses:
+        '201':
+          description: 'New Bazarr instance created'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BazarrSettings'
+  /settings/bazarr/test:
+    post:
+      summary: Test Bazarr configuration
+      description: Tests if the Bazarr configuration is valid. Returns version and accessibility status.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  example: '127.0.0.1'
+                port:
+                  type: number
+                  example: 6767
+                apiKey:
+                  type: string
+                  example: yourapikey
+                useSsl:
+                  type: boolean
+                  example: false
+                baseUrl:
+                  type: string
+              required:
+                - hostname
+                - port
+                - apiKey
+                - useSsl
+      responses:
+        '200':
+          description: Successfully connected to Bazarr instance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                  radarrAccessible:
+                    type: boolean
+                  sonarrAccessible:
+                    type: boolean
+  /settings/bazarr/{bazarrId}:
+    put:
+      summary: Update Bazarr instance
+      description: Updates an existing Bazarr instance with the provided values.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: bazarrId
+          required: true
+          schema:
+            type: integer
+          description: Bazarr instance ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BazarrSettings'
+      responses:
+        '200':
+          description: 'Bazarr instance updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BazarrSettings'
+    delete:
+      summary: Delete Bazarr instance
+      description: Deletes an existing Bazarr instance based on the bazarrId parameter.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: bazarrId
+          required: true
+          schema:
+            type: integer
+          description: Bazarr instance ID
+      responses:
+        '200':
+          description: 'Bazarr instance deleted'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BazarrSettings'
   /settings/public:
     get:
       summary: Get public settings
@@ -7159,6 +7313,185 @@ paths:
                         type: array
                         items:
                           $ref: '#/components/schemas/User'
+  /media/{mediaId}/download:
+    get:
+      summary: Download media file
+      description: Proxy-streams the media file from Jellyfin to the client.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Media file stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Media not found or no Jellyfin ID
+        '500':
+          description: Failed to download media
+  /media/{mediaId}/subtitles:
+    get:
+      summary: Get available subtitles
+      description: Returns available subtitles for a media item from Bazarr.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Available subtitles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subtitles:
+                    type: array
+                    items:
+                      type: object
+                  missing:
+                    type: array
+                    items:
+                      type: object
+  /media/{mediaId}/subtitle/{language}/download:
+    get:
+      summary: Download subtitle file
+      description: Downloads a subtitle file for a media item. Checks Jellyfin first, then falls back to Bazarr.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: path
+          name: language
+          description: Subtitle language code (e.g. eng, rum)
+          required: true
+          example: 'eng'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subtitle file stream
+          content:
+            text/srt:
+              schema:
+                type: string
+        '202':
+          description: Subtitle download triggered via Bazarr
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: No subtitle found for the specified language
+  /media/{mediaId}/episode/{seasonNumber}/{episodeNumber}/download:
+    get:
+      summary: Download TV episode
+      description: Downloads a specific TV episode from Jellyfin.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: path
+          name: seasonNumber
+          description: Season number
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: path
+          name: episodeNumber
+          description: Episode number
+          required: true
+          example: '1'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Episode file stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Episode not found
+        '500':
+          description: Failed to download episode
+  /media/{mediaId}/episode/{seasonNumber}/{episodeNumber}/subtitle/{language}/download:
+    get:
+      summary: Download episode subtitle
+      description: Downloads a subtitle for a specific TV episode from Jellyfin.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: path
+          name: seasonNumber
+          description: Season number
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: path
+          name: episodeNumber
+          description: Episode number
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: path
+          name: language
+          description: Subtitle language code (e.g. eng, rum)
+          required: true
+          example: 'eng'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subtitle file stream
+          content:
+            text/srt:
+              schema:
+                type: string
+        '404':
+          description: Subtitle not found for episode
   /collection/{collectionId}:
     get:
       summary: Get collection details
