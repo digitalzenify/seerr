@@ -13,6 +13,7 @@ import type {
   TvResult,
 } from '@server/models/Search';
 import { useIntl } from 'react-intl';
+import useSWR from 'swr';
 
 type ListViewProps = {
   items?: (TvResult | MovieResult | PersonResult | CollectionResult)[];
@@ -41,6 +42,34 @@ const ListView = ({
     [Permission.MANAGE_BLOCKLIST, Permission.VIEW_BLOCKLIST],
     { type: 'or' }
   );
+
+  // Collect TMDB IDs for IMDB rating batch fetch
+  const movieIds = (items ?? [])
+    .slice(0, 20)
+    .filter((t): t is MovieResult => t.mediaType === 'movie')
+    .map((t) => t.id);
+  const tvIds = (items ?? [])
+    .slice(0, 20)
+    .filter((t): t is TvResult => t.mediaType === 'tv')
+    .map((t) => t.id);
+
+  // Batch fetch IMDB ratings (separate calls for movies and tv)
+  const { data: movieRatings } = useSWR<
+    Record<number, { imdbRating?: number }>
+  >(
+    movieIds.length > 0
+      ? `/api/v1/discover/ratings?tmdbIds=${movieIds.join(',')}&mediaType=movie`
+      : null
+  );
+  const { data: tvRatings } = useSWR<
+    Record<number, { imdbRating?: number }>
+  >(
+    tvIds.length > 0
+      ? `/api/v1/discover/ratings?tmdbIds=${tvIds.join(',')}&mediaType=tv`
+      : null
+  );
+
+  const imdbRatings = { ...movieRatings, ...tvRatings };
 
   return (
     <>
@@ -90,6 +119,7 @@ const ListView = ({
                     summary={title.overview}
                     title={title.title}
                     userScore={title.voteAverage}
+                    imdbRating={imdbRatings[title.id]?.imdbRating}
                     year={title.releaseDate}
                     mediaType={title.mediaType}
                     inProgress={
@@ -112,6 +142,7 @@ const ListView = ({
                     summary={title.overview}
                     title={title.name}
                     userScore={title.voteAverage}
+                    imdbRating={imdbRatings[title.id]?.imdbRating}
                     year={title.firstAirDate}
                     mediaType={title.mediaType}
                     inProgress={

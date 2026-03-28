@@ -155,13 +155,17 @@ const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
           !router.pathname.match(/(login|setup|resetpassword)/) &&
           hasPermission(Permission.ADMIN)
         ) {
-          requestsCount().then((data) => {
-            if (data.pending > 0) {
-              newNavigator.setAppBadge?.(data.pending);
-            } else {
-              newNavigator.clearAppBadge?.();
-            }
-          });
+          requestsCount()
+            .then((data) => {
+              if (data.pending > 0) {
+                newNavigator.setAppBadge?.(data.pending);
+              } else {
+                newNavigator.clearAppBadge?.();
+              }
+            })
+            .catch(() => {
+              // Silently handle badge update failures
+            });
         } else {
           newNavigator.clearAppBadge?.();
         }

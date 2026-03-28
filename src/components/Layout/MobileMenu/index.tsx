@@ -4,6 +4,7 @@ import useClickOutside from '@app/hooks/useClickOutside';
 import { Permission, useUser } from '@app/hooks/useUser';
 import { Transition } from '@headlessui/react';
 import {
+  ChartBarSquareIcon,
   ClockIcon,
   CogIcon,
   EllipsisHorizontalIcon,
@@ -15,6 +16,7 @@ import {
   UsersIcon,
 } from '@heroicons/react/24/outline';
 import {
+  ChartBarSquareIcon as FilledChartBarSquareIcon,
   ClockIcon as FilledClockIcon,
   CogIcon as FilledCogIcon,
   ExclamationTriangleIcon as FilledExclamationTriangleIcon,
@@ -98,6 +100,13 @@ const MobileMenu = ({
       svgIcon: <ClockIcon className="h-6 w-6" />,
       svgIconSelected: <FilledClockIcon className="h-6 w-6" />,
       activeRegExp: /^\/requests/,
+    },
+    {
+      href: '/profile/statistics',
+      content: intl.formatMessage(menuMessages.statistics),
+      svgIcon: <ChartBarSquareIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledChartBarSquareIcon className="h-6 w-6" />,
+      activeRegExp: /^\/(profile|users\/\d+)\/statistics/,
     },
     {
       href: '/blocklist',
