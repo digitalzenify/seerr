@@ -6356,6 +6356,42 @@ paths:
                           type: string
                         title:
                           type: string
+  /discover/ratings:
+    get:
+      summary: Batch-fetch IMDB ratings for discover page items
+      description: |
+        Fetches IMDB ratings for a list of TMDB IDs.
+        Results are cached per TMDB ID for 1 week to minimize API calls.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: tmdbIds
+          schema:
+            type: string
+            example: '550,680,120'
+          description: Comma-separated list of TMDB IDs (max 20)
+        - in: query
+          name: mediaType
+          schema:
+            type: string
+            enum:
+              - movie
+              - tv
+            default: movie
+      responses:
+        '200':
+          description: A map of TMDB IDs to IMDB ratings
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    imdbRating:
+                      type: number
+                      example: 8.1
   /request:
     get:
       summary: Get all requests

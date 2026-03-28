@@ -1,7 +1,9 @@
 import PlexTvAPI from '@server/api/plextv';
+import IMDBRadarrProxy from '@server/api/rating/imdbRadarrProxy';
 import type { SortOptions } from '@server/api/themoviedb';
 import TheMovieDb from '@server/api/themoviedb';
 import type { TmdbKeyword } from '@server/api/themoviedb/interfaces';
+import cacheManager from '@server/lib/cache';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -972,5 +974,85 @@ discoverRoutes.get<Record<string, unknown>, WatchlistResponse>(
     });
   }
 );
+
+/**
+ * GET /discover/ratings
+ * Batch-fetch IMDB ratings for a list of TMDB IDs.
+ * Caches results per TMDB ID for 1 week to minimize API calls.
+ * Query params: tmdbIds (comma-separated), mediaType ('movie' | 'tv')
+ */
+discoverRoutes.get('/ratings', async (req, res, next) => {
+  try {
+    const tmdbIdsParam = req.query.tmdbIds as string | undefined;
+    if (!tmdbIdsParam) {
+      return res.status(200).json({});
+    }
+
+    const tmdbIds = tmdbIdsParam
+      .split(',')
+      .map((id) => Number(id.trim()))
+      .filter((id) => !isNaN(id) && id > 0)
+      .slice(0, 20); // Limit to 20 items per request
+
+    const mediaType = (req.query.mediaType as string) || 'movie';
+    const cache = cacheManager.getCache('imdb-discover').data;
+    const tmdb = createTmdbWithRegionLanguage(req.user);
+    const imdbApi = new IMDBRadarrProxy();
+
+    const ratings: Record<number, { imdbRating?: number }> = {};
+
+    await Promise.allSettled(
+      tmdbIds.map(async (tmdbId) => {
+        const cacheKey = `imdb-${mediaType}-${tmdbId}`;
+        const cached = cache.get<number | null>(cacheKey);
+
+        if (cached !== undefined) {
+          if (cached !== null) {
+            ratings[tmdbId] = { imdbRating: cached };
+          }
+          return;
+        }
+
+        try {
+          let imdbId: string | undefined;
+
+          if (mediaType === 'movie') {
+            const movie = await tmdb.getMovie({ movieId: tmdbId });
+            imdbId = movie.imdb_id;
+          } else {
+            const tvShow = await tmdb.getTvShow({ tvId: tmdbId });
+            imdbId = tvShow.external_ids?.imdb_id;
+          }
+
+          if (imdbId) {
+            const imdbRating = await imdbApi.getMovieRatings(imdbId);
+            if (imdbRating?.criticsScore) {
+              ratings[tmdbId] = { imdbRating: imdbRating.criticsScore };
+              cache.set(cacheKey, imdbRating.criticsScore);
+            } else {
+              cache.set(cacheKey, null); // Cache the miss too
+            }
+          } else {
+            cache.set(cacheKey, null);
+          }
+        } catch (e) {
+          logger.debug(`Failed to fetch IMDB rating for TMDB ${tmdbId}`, {
+            label: 'Discover Ratings',
+            message: e.message,
+          });
+          // Don't cache errors - allow retry on next request
+        }
+      })
+    );
+
+    return res.status(200).json(ratings);
+  } catch (e) {
+    logger.error('Failed to fetch batch ratings', {
+      label: 'Discover Ratings',
+      message: e.message,
+    });
+    next({ status: 500, message: 'Failed to fetch ratings.' });
+  }
+});
 
 export default discoverRoutes;
