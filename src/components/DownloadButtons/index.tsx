@@ -54,12 +54,22 @@ const DownloadButtons = ({ mediaId }: DownloadButtonsProps) => {
         return;
       }
 
+      // Extract filename from Content-Disposition header if available
+      const disposition = response.headers.get('content-disposition');
+      let filename = `subtitle-${language}.srt`;
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match?.[1]) {
+          filename = match[1];
+        }
+      }
+
       // Create a blob from the response and trigger a download
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `subtitle-${language}.srt`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
