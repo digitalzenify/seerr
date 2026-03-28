@@ -12,6 +12,7 @@ export type AvailableCacheIds =
   | 'plexwatchlist'
   | 'tvdb'
   | 'imdb-discover'
+  | 'rt-discover'
   | 'because-you-watched'
   | 'user-stats';
 
@@ -79,6 +80,10 @@ class CacheManager {
       checkPeriod: 60 * 30,
     }),
     'imdb-discover': new Cache('imdb-discover', 'IMDB Discover Ratings', {
+      stdTtl: 86400 * 7, // 1 week cache
+      checkPeriod: 60 * 30,
+    }),
+    'rt-discover': new Cache('rt-discover', 'Rotten Tomatoes Discover Ratings', {
       stdTtl: 86400 * 7, // 1 week cache
       checkPeriod: 60 * 30,
     }),

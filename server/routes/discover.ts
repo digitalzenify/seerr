@@ -1,6 +1,7 @@
 import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
 import IMDBRadarrProxy from '@server/api/rating/imdbRadarrProxy';
+import RottenTomatoes from '@server/api/rating/rottentomatoes';
 import type { SortOptions } from '@server/api/themoviedb';
 import TheMovieDb from '@server/api/themoviedb';
 import type {
@@ -1354,51 +1355,144 @@ discoverRoutes.get('/ratings', async (req, res, next) => {
       .slice(0, 20); // Limit to 20 items per request
 
     const mediaType = (req.query.mediaType as string) || 'movie';
-    const cache = cacheManager.getCache('imdb-discover').data;
+    const imdbCache = cacheManager.getCache('imdb-discover').data;
+    const rtCache = cacheManager.getCache('rt-discover').data;
     const tmdb = createTmdbWithRegionLanguage(req.user);
     const imdbApi = new IMDBRadarrProxy();
+    const rtApi = new RottenTomatoes();
 
-    const ratings: Record<number, { imdbRating?: number }> = {};
+    const ratings: Record<
+      number,
+      { imdbRating?: number; rtCriticsRating?: string; rtCriticsScore?: number }
+    > = {};
 
     await Promise.allSettled(
       tmdbIds.map(async (tmdbId) => {
-        const cacheKey = `imdb-${mediaType}-${tmdbId}`;
-        const cached = cache.get<number | null>(cacheKey);
+        const imdbCacheKey = `imdb-${mediaType}-${tmdbId}`;
+        const rtCacheKey = `rt-${mediaType}-${tmdbId}`;
+        const cachedImdb = imdbCache.get<number | null>(imdbCacheKey);
+        const cachedRt = rtCache.get<{
+          criticsRating: string;
+          criticsScore: number;
+        } | null>(rtCacheKey);
 
-        if (cached !== undefined) {
-          if (cached !== null) {
-            ratings[tmdbId] = { imdbRating: cached };
+        // If both are cached, use cached values
+        if (cachedImdb !== undefined && cachedRt !== undefined) {
+          const entry: {
+            imdbRating?: number;
+            rtCriticsRating?: string;
+            rtCriticsScore?: number;
+          } = {};
+          if (cachedImdb !== null) {
+            entry.imdbRating = cachedImdb;
+          }
+          if (cachedRt !== null) {
+            entry.rtCriticsRating = cachedRt.criticsRating;
+            entry.rtCriticsScore = cachedRt.criticsScore;
+          }
+          if (Object.keys(entry).length > 0) {
+            ratings[tmdbId] = entry;
           }
           return;
         }
 
         try {
           let imdbId: string | undefined;
+          let title: string | undefined;
+          let year: number | undefined;
 
           if (mediaType === 'movie') {
             const movie = await tmdb.getMovie({ movieId: tmdbId });
             imdbId = movie.imdb_id;
+            title = movie.title;
+            year = movie.release_date
+              ? new Date(movie.release_date).getFullYear()
+              : undefined;
           } else {
             const tvShow = await tmdb.getTvShow({ tvId: tmdbId });
             imdbId = tvShow.external_ids?.imdb_id;
+            title = tvShow.name;
+            year = tvShow.first_air_date
+              ? new Date(tvShow.first_air_date).getFullYear()
+              : undefined;
           }
 
-          if (imdbId) {
-            const imdbRating = await imdbApi.getMovieRatings(imdbId);
-            if (imdbRating?.criticsScore) {
-              ratings[tmdbId] = { imdbRating: imdbRating.criticsScore };
-              cache.set(cacheKey, imdbRating.criticsScore);
-            } else {
-              cache.set(cacheKey, null); // Cache the miss too
+          const entry: {
+            imdbRating?: number;
+            rtCriticsRating?: string;
+            rtCriticsScore?: number;
+          } = {};
+
+          // Fetch IMDB rating (only if not already cached)
+          if (cachedImdb === undefined) {
+            try {
+              if (imdbId) {
+                const imdbRating = await imdbApi.getMovieRatings(imdbId);
+                if (imdbRating?.criticsScore) {
+                  entry.imdbRating = imdbRating.criticsScore;
+                  imdbCache.set(imdbCacheKey, imdbRating.criticsScore);
+                } else {
+                  imdbCache.set(imdbCacheKey, null);
+                }
+              } else {
+                imdbCache.set(imdbCacheKey, null);
+              }
+            } catch (e) {
+              logger.debug(
+                `Failed to fetch IMDB rating for TMDB ${tmdbId}`,
+                {
+                  label: 'Discover Ratings',
+                  message: e.message,
+                }
+              );
             }
-          } else {
-            cache.set(cacheKey, null);
+          } else if (cachedImdb !== null) {
+            entry.imdbRating = cachedImdb;
+          }
+
+          // Fetch RT rating (only if not already cached)
+          if (cachedRt === undefined) {
+            try {
+              if (title) {
+                const rtRating =
+                  mediaType === 'movie'
+                    ? await rtApi.getMovieRatings(title, year ?? 0)
+                    : await rtApi.getTVRatings(title, year);
+                if (rtRating) {
+                  entry.rtCriticsRating = rtRating.criticsRating;
+                  entry.rtCriticsScore = rtRating.criticsScore;
+                  rtCache.set(rtCacheKey, {
+                    criticsRating: rtRating.criticsRating,
+                    criticsScore: rtRating.criticsScore,
+                  });
+                } else {
+                  rtCache.set(rtCacheKey, null);
+                }
+              } else {
+                rtCache.set(rtCacheKey, null);
+              }
+            } catch (e) {
+              logger.debug(`Failed to fetch RT rating for TMDB ${tmdbId}`, {
+                label: 'Discover Ratings',
+                message: e.message,
+              });
+            }
+          } else if (cachedRt !== null) {
+            entry.rtCriticsRating = cachedRt.criticsRating;
+            entry.rtCriticsScore = cachedRt.criticsScore;
+          }
+
+          if (Object.keys(entry).length > 0) {
+            ratings[tmdbId] = entry;
           }
         } catch (e) {
-          logger.debug(`Failed to fetch IMDB rating for TMDB ${tmdbId}`, {
-            label: 'Discover Ratings',
-            message: e.message,
-          });
+          logger.debug(
+            `Failed to fetch ratings for TMDB ${tmdbId}`,
+            {
+              label: 'Discover Ratings',
+              message: e.message,
+            }
+          );
           // Don't cache errors - allow retry on next request
         }
       })

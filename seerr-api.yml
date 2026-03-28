@@ -6484,9 +6484,9 @@ paths:
                       $ref: '#/components/schemas/MovieResult'
   /discover/ratings:
     get:
-      summary: Batch-fetch IMDB ratings for discover page items
+      summary: Batch-fetch IMDB and Rotten Tomatoes ratings for discover page items
       description: |
-        Fetches IMDB ratings for a list of TMDB IDs.
+        Fetches IMDB and Rotten Tomatoes ratings for a list of TMDB IDs.
         Results are cached per TMDB ID for 1 week to minimize API calls.
       tags:
         - search
@@ -6507,7 +6507,7 @@ paths:
             default: movie
       responses:
         '200':
-          description: A map of TMDB IDs to IMDB ratings
+          description: A map of TMDB IDs to ratings
           content:
             application/json:
               schema:
@@ -6518,6 +6518,12 @@ paths:
                     imdbRating:
                       type: number
                       example: 8.1
+                    rtCriticsRating:
+                      type: string
+                      example: Fresh
+                    rtCriticsScore:
+                      type: number
+                      example: 85
   /request:
     get:
       summary: Get all requests
