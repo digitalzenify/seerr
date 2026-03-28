@@ -1,8 +1,13 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
 import IMDBRadarrProxy from '@server/api/rating/imdbRadarrProxy';
 import type { SortOptions } from '@server/api/themoviedb';
 import TheMovieDb from '@server/api/themoviedb';
-import type { TmdbKeyword } from '@server/api/themoviedb/interfaces';
+import type {
+  TmdbKeyword,
+  TmdbMovieResult,
+  TmdbTvResult,
+} from '@server/api/themoviedb/interfaces';
 import cacheManager from '@server/lib/cache';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
@@ -15,6 +20,7 @@ import type {
 } from '@server/interfaces/api/discoverInterfaces';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { isAuthenticated } from '@server/middleware/auth';
 import { mapProductionCompany } from '@server/models/Movie';
 import {
   mapCollectionResult,
@@ -972,6 +978,379 @@ discoverRoutes.get<Record<string, unknown>, WatchlistResponse>(
         tmdbId: item.tmdbId,
       })),
     });
+  }
+);
+
+/**
+ * Helper: Get a Jellyfin API client authenticated as the admin user.
+ */
+function getJellyfinClient(): JellyfinAPI | undefined {
+  const settings = getSettings();
+  const jf = settings.jellyfin;
+  if (!jf.ip || !jf.apiKey) return undefined;
+  const protocol = jf.useSsl ? 'https' : 'http';
+  const urlBase = jf.urlBase ? `/${jf.urlBase.replace(/^\//, '')}` : '';
+  const baseUrl = `${protocol}://${jf.ip}:${jf.port}${urlBase}`;
+  return new JellyfinAPI(baseUrl, jf.apiKey);
+}
+
+interface BecauseYouWatchedCacheEntry {
+  recommendations: Array<{
+    id: number;
+    mediaType: 'movie' | 'tv';
+    title: string;
+    posterPath?: string;
+    overview: string;
+    releaseDate?: string;
+    firstAirDate?: string;
+    voteAverage: number;
+    voteCount: number;
+    genreIds: number[];
+    originalLanguage: string;
+    popularity: number;
+    backdropPath?: string;
+  }>;
+  generatedAt: number;
+}
+
+/**
+ * GET /discover/because-you-watched
+ * Returns personalized recommendations based on the user's Jellyfin watch history.
+ * Per-user caching with 48h TTL.
+ */
+discoverRoutes.get(
+  '/because-you-watched',
+  isAuthenticated(),
+  async (req, res, next) => {
+    try {
+      const user = req.user;
+      if (!user?.jellyfinUserId) {
+        // Fallback: return trending for users without Jellyfin history
+        const tmdb = createTmdbWithRegionLanguage(user);
+        const trending = await tmdb.getTrending({ page: 1 });
+        const media = await Media.getRelatedMedia(
+          req.user,
+          trending.results.map((r) => ({
+            tmdbId: r.id,
+            mediaType:
+              r.media_type === 'movie' ? MediaType.MOVIE : MediaType.TV,
+          }))
+        );
+        return res.status(200).json({
+          page: 1,
+          totalPages: 1,
+          totalResults: trending.results.length,
+          results: trending.results.map((result) => {
+            if (result.media_type === 'movie') {
+              return mapMovieResult(
+                result as TmdbMovieResult,
+                media.find(
+                  (m) =>
+                    m.tmdbId === result.id &&
+                    m.mediaType === MediaType.MOVIE
+                )
+              );
+            }
+            return mapTvResult(
+              result as TmdbTvResult,
+              media.find(
+                (m) =>
+                  m.tmdbId === result.id && m.mediaType === MediaType.TV
+              )
+            );
+          }),
+        });
+      }
+
+      const cache = cacheManager.getCache('because-you-watched').data;
+      const cacheKey = `user-${user.id}`;
+      const cached = cache.get<BecauseYouWatchedCacheEntry>(cacheKey);
+
+      const page = Number(req.query.page) || 1;
+      const pageSize = 20;
+
+      if (cached) {
+        const start = (page - 1) * pageSize;
+        const paged = cached.recommendations.slice(start, start + pageSize);
+
+        const media = await Media.getRelatedMedia(
+          req.user,
+          paged.map((r) => ({
+            tmdbId: r.id,
+            mediaType:
+              r.mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV,
+          }))
+        );
+
+        return res.status(200).json({
+          page,
+          totalPages: Math.ceil(cached.recommendations.length / pageSize),
+          totalResults: cached.recommendations.length,
+          results: paged.map((r) => {
+            const mediaInfo = media.find(
+              (m) =>
+                m.tmdbId === r.id &&
+                m.mediaType ===
+                  (r.mediaType === 'movie'
+                    ? MediaType.MOVIE
+                    : MediaType.TV)
+            );
+            if (r.mediaType === 'movie') {
+              return {
+                ...r,
+                mediaInfo,
+              };
+            }
+            return {
+              ...r,
+              name: r.title,
+              mediaInfo,
+            };
+          }),
+        });
+      }
+
+      // Fetch watch history from Jellyfin
+      const jf = getJellyfinClient();
+      if (!jf) {
+        return res.status(200).json({
+          page: 1,
+          totalPages: 0,
+          totalResults: 0,
+          results: [],
+        });
+      }
+
+      jf.setUserId(user.jellyfinUserId);
+      const recentlyPlayed = await jf.getRecentlyPlayed(15);
+
+      if (!recentlyPlayed.length) {
+        // No watch history - return trending as fallback
+        const tmdb = createTmdbWithRegionLanguage(user);
+        const trending = await tmdb.getTrending({ page: 1 });
+        const media = await Media.getRelatedMedia(
+          req.user,
+          trending.results.map((r) => ({
+            tmdbId: r.id,
+            mediaType:
+              r.media_type === 'movie' ? MediaType.MOVIE : MediaType.TV,
+          }))
+        );
+        return res.status(200).json({
+          page: 1,
+          totalPages: 1,
+          totalResults: trending.results.length,
+          results: trending.results.map((result) => {
+            if (result.media_type === 'movie') {
+              return mapMovieResult(
+                result as TmdbMovieResult,
+                media.find(
+                  (m) =>
+                    m.tmdbId === result.id &&
+                    m.mediaType === MediaType.MOVIE
+                )
+              );
+            }
+            return mapTvResult(
+              result as TmdbTvResult,
+              media.find(
+                (m) =>
+                  m.tmdbId === result.id && m.mediaType === MediaType.TV
+              )
+            );
+          }),
+        });
+      }
+
+      // Map Jellyfin items to TMDB IDs, dedup series by SeriesId
+      const seenSeries = new Set<string>();
+      const watchedTmdbItems: Array<{
+        tmdbId: number;
+        type: 'movie' | 'tv';
+      }> = [];
+
+      for (const item of recentlyPlayed) {
+        if (item.Type === 'Episode') {
+          // For episodes, use the series TMDB ID
+          const seriesId = item.SeriesId;
+          if (seriesId && !seenSeries.has(seriesId)) {
+            seenSeries.add(seriesId);
+            // Need to fetch the series to get TMDB provider ID
+            const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TheMovieDb;
+            if (tmdbId) {
+              watchedTmdbItems.push({
+                tmdbId: Number(tmdbId),
+                type: 'tv',
+              });
+            } else if (seriesId) {
+              // Try to get the series data to find TMDB ID
+              try {
+                const seriesData = await jf.getItemData(seriesId);
+                const seriesTmdbId =
+                  seriesData?.ProviderIds?.Tmdb ??
+                  seriesData?.ProviderIds?.TheMovieDb;
+                if (seriesTmdbId) {
+                  watchedTmdbItems.push({
+                    tmdbId: Number(seriesTmdbId),
+                    type: 'tv',
+                  });
+                }
+              } catch {
+                // Skip if can't fetch series data
+              }
+            }
+          }
+        } else if (item.Type === 'Movie') {
+          const tmdbId =
+            item.ProviderIds?.Tmdb || item.ProviderIds?.TheMovieDb;
+          if (tmdbId) {
+            watchedTmdbItems.push({
+              tmdbId: Number(tmdbId),
+              type: 'movie',
+            });
+          }
+        }
+      }
+
+      // Fetch TMDB recommendations for each watched item
+      const tmdb = createTmdbWithRegionLanguage(user);
+      const recommendationCounts = new Map<
+        string,
+        {
+          count: number;
+          item: BecauseYouWatchedCacheEntry['recommendations'][0];
+        }
+      >();
+
+      await Promise.allSettled(
+        watchedTmdbItems.slice(0, 15).map(async ({ tmdbId, type }) => {
+          try {
+            if (type === 'movie') {
+              const recs = await tmdb.getMovieRecommendations({
+                movieId: tmdbId,
+              });
+              for (const rec of recs.results.slice(0, 8)) {
+                const key = `movie-${rec.id}`;
+                const existing = recommendationCounts.get(key);
+                if (existing) {
+                  existing.count++;
+                } else {
+                  recommendationCounts.set(key, {
+                    count: 1,
+                    item: {
+                      id: rec.id,
+                      mediaType: 'movie',
+                      title: rec.title,
+                      posterPath: rec.poster_path,
+                      overview: rec.overview,
+                      releaseDate: rec.release_date,
+                      voteAverage: rec.vote_average,
+                      voteCount: rec.vote_count,
+                      genreIds: rec.genre_ids,
+                      originalLanguage: rec.original_language,
+                      popularity: rec.popularity,
+                      backdropPath: rec.backdrop_path,
+                    },
+                  });
+                }
+              }
+            } else {
+              const recs = await tmdb.getTvRecommendations({ tvId: tmdbId });
+              for (const rec of recs.results.slice(0, 8)) {
+                const key = `tv-${rec.id}`;
+                const existing = recommendationCounts.get(key);
+                if (existing) {
+                  existing.count++;
+                } else {
+                  recommendationCounts.set(key, {
+                    count: 1,
+                    item: {
+                      id: rec.id,
+                      mediaType: 'tv',
+                      title: rec.name,
+                      posterPath: rec.poster_path,
+                      overview: rec.overview,
+                      firstAirDate: rec.first_air_date,
+                      voteAverage: rec.vote_average,
+                      voteCount: rec.vote_count,
+                      genreIds: rec.genre_ids,
+                      originalLanguage: rec.original_language,
+                      popularity: rec.popularity,
+                      backdropPath: rec.backdrop_path,
+                    },
+                  });
+                }
+              }
+            }
+          } catch (e) {
+            logger.debug(
+              `Failed to fetch recommendations for TMDB ${type}/${tmdbId}`,
+              { label: 'Discover', message: e.message }
+            );
+          }
+        })
+      );
+
+      // Rank by frequency (higher count = higher rank), then by popularity
+      const recommendations = Array.from(recommendationCounts.values())
+        .sort((a, b) => b.count - a.count || b.item.popularity - a.item.popularity)
+        .map((entry) => entry.item);
+
+      // Cache the recommendations
+      cache.set<BecauseYouWatchedCacheEntry>(cacheKey, {
+        recommendations,
+        generatedAt: Date.now(),
+      });
+
+      // Return paginated results
+      const start = (page - 1) * pageSize;
+      const paged = recommendations.slice(start, start + pageSize);
+
+      const media = await Media.getRelatedMedia(
+        req.user,
+        paged.map((r) => ({
+          tmdbId: r.id,
+          mediaType:
+            r.mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV,
+        }))
+      );
+
+      return res.status(200).json({
+        page,
+        totalPages: Math.ceil(recommendations.length / pageSize),
+        totalResults: recommendations.length,
+        results: paged.map((r) => {
+          const mediaInfo = media.find(
+            (m) =>
+              m.tmdbId === r.id &&
+              m.mediaType ===
+                (r.mediaType === 'movie'
+                  ? MediaType.MOVIE
+                  : MediaType.TV)
+          );
+          if (r.mediaType === 'movie') {
+            return {
+              ...r,
+              mediaInfo,
+            };
+          }
+          return {
+            ...r,
+            name: r.title,
+            mediaInfo,
+          };
+        }),
+      });
+    } catch (e) {
+      logger.error('Failed to generate Because You Watched recommendations', {
+        label: 'Discover',
+        message: e.message,
+      });
+      next({
+        status: 500,
+        message: 'Failed to generate recommendations.',
+      });
+    }
   }
 );
 

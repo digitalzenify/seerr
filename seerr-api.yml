@@ -6356,6 +6356,40 @@ paths:
                           type: string
                         title:
                           type: string
+  /discover/because-you-watched:
+    get:
+      summary: Get personalized recommendations based on watch history
+      description: |
+        Returns personalized content recommendations based on the user's Jellyfin
+        watch history. For users without watch history, falls back to trending content.
+        Results are cached per-user with a 48-hour TTL.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Personalized recommendations returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                  totalPages:
+                    type: number
+                  totalResults:
+                    type: number
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MovieResult'
   /discover/ratings:
     get:
       summary: Batch-fetch IMDB ratings for discover page items

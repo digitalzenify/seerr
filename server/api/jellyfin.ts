@@ -451,6 +451,43 @@ class JellyfinAPI extends ExternalAPI {
     }
   }
 
+  public async getRecentlyPlayed(
+    limit = 15
+  ): Promise<JellyfinLibraryItemExtended[]> {
+    try {
+      const endpoint =
+        this.mediaServerType === MediaServerType.JELLYFIN
+          ? `/Items`
+          : `/Users/${this.userId}/Items`;
+
+      const params: Record<string, string> = {
+        SortBy: 'DatePlayed',
+        SortOrder: 'Descending',
+        IncludeItemTypes: 'Movie,Episode',
+        Recursive: 'true',
+        IsPlayed: 'true',
+        Limit: String(limit),
+        fields: 'ProviderIds,DateCreated',
+      };
+
+      if (this.mediaServerType === MediaServerType.JELLYFIN) {
+        params.userId = this.userId ?? 'Me';
+      }
+
+      const response = await this.get<JellyfinItemsReponse>(endpoint, {
+        params,
+      });
+
+      return response.Items ?? [];
+    } catch (e) {
+      logger.error(
+        `Something went wrong while getting recently played items from the Jellyfin server: ${e.message}`,
+        { label: 'Jellyfin API', error: e?.response?.status }
+      );
+      return [];
+    }
+  }
+
   public async createApiToken(appName: string): Promise<string> {
     try {
       await this.post(`/Auth/Keys?App=${appName}`);

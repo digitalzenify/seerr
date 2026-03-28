@@ -3,6 +3,7 @@ import ConfirmButton from '@app/components/Common/ConfirmButton';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
+import BecauseYouWatchedSlider from '@app/components/Discover/BecauseYouWatchedSlider';
 import { sliderTitles } from '@app/components/Discover/constants';
 import CreateSlider from '@app/components/Discover/CreateSlider';
 import DiscoverSliderEdit from '@app/components/Discover/DiscoverSliderEdit';
@@ -395,6 +396,9 @@ const Discover = () => {
                 }&watchProviders=${slider.data?.split(',')[1]}`}
               />
             );
+            break;
+          case DiscoverSliderType.BECAUSE_YOU_WATCHED:
+            sliderComponent = <BecauseYouWatchedSlider />;
             break;
         }
 

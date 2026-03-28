@@ -11,7 +11,9 @@ export type AvailableCacheIds =
   | 'plextv'
   | 'plexwatchlist'
   | 'tvdb'
-  | 'imdb-discover';
+  | 'imdb-discover'
+  | 'because-you-watched'
+  | 'user-stats';
 
 const DEFAULT_TTL = 300;
 const DEFAULT_CHECK_PERIOD = 120;
@@ -78,6 +80,18 @@ class CacheManager {
     }),
     'imdb-discover': new Cache('imdb-discover', 'IMDB Discover Ratings', {
       stdTtl: 86400 * 7, // 1 week cache
+      checkPeriod: 60 * 30,
+    }),
+    'because-you-watched': new Cache(
+      'because-you-watched',
+      'Because You Watched Recommendations',
+      {
+        stdTtl: 86400 * 2, // 48 hour cache
+        checkPeriod: 60 * 30,
+      }
+    ),
+    'user-stats': new Cache('user-stats', 'User Statistics', {
+      stdTtl: 86400, // 24 hour cache
       checkPeriod: 60 * 30,
     }),
   };
