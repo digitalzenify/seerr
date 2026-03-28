@@ -189,6 +189,8 @@ class Media {
   public serviceUrl4k?: string;
   public downloadStatus?: DownloadingItem[] = [];
   public downloadStatus4k?: DownloadingItem[] = [];
+  public recentlyDownloaded?: boolean;
+  public recentlyDownloaded4k?: boolean;
 
   public mediaUrl?: string;
   public mediaUrl4k?: string;
@@ -347,6 +349,10 @@ class Media {
           this.serviceId,
           this.externalServiceId
         );
+        this.recentlyDownloaded = downloadTracker.wasRecentlyDownloading(
+          MediaType.MOVIE,
+          this.externalServiceId
+        );
       }
 
       if (
@@ -357,6 +363,10 @@ class Media {
       ) {
         this.downloadStatus4k = downloadTracker.getMovieProgress(
           this.serviceId4k,
+          this.externalServiceId4k
+        );
+        this.recentlyDownloaded4k = downloadTracker.wasRecentlyDownloading(
+          MediaType.MOVIE,
           this.externalServiceId4k
         );
       }
@@ -373,6 +383,10 @@ class Media {
           this.serviceId,
           this.externalServiceId
         );
+        this.recentlyDownloaded = downloadTracker.wasRecentlyDownloading(
+          MediaType.TV,
+          this.externalServiceId
+        );
       }
 
       if (
@@ -383,6 +397,10 @@ class Media {
       ) {
         this.downloadStatus4k = downloadTracker.getSeriesProgress(
           this.serviceId4k,
+          this.externalServiceId4k
+        );
+        this.recentlyDownloaded4k = downloadTracker.wasRecentlyDownloading(
+          MediaType.TV,
           this.externalServiceId4k
         );
       }

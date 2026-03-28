@@ -23,16 +23,22 @@
  *    Progress (0-100), sizeLeft, timeLeft, and ETA are included when
  *    available.
  *
- * 5. WAITING_FOR_RELEASE — MediaStatus.PROCESSING + no active downloads.
+ * 5. IMPORTING (post-queue) — MediaStatus.PROCESSING + no active downloads +
+ *    the item was recently tracked in the download queue.  This bridges the
+ *    gap between the queue item being removed (import done in *arr) and
+ *    Seerr updating MediaStatus to AVAILABLE.
+ *
+ * 6. WAITING_FOR_RELEASE — MediaStatus.PROCESSING + no active downloads +
+ *    the item was NOT recently in the download queue.
  *    The item has been added to Radarr/Sonarr (monitored) but no file
  *    exists and nothing is in the queue. The most common cause is a future
  *    release date or a release that hasn't been indexed yet.
  *
- * 6. WAITING_FOR_MATCH — MediaStatus.UNKNOWN + request is APPROVED.
+ * 7. WAITING_FOR_MATCH — MediaStatus.UNKNOWN + request is APPROVED.
  *    The item has not yet been picked up by the *arr scanner, meaning it
  *    either hasn't synced yet or truly has no indexer match.
  *
- * 7. REQUESTED — catch-all for PENDING requests and any edge-cases where
+ * 8. REQUESTED — catch-all for PENDING requests and any edge-cases where
  *    not enough downstream state exists to be more specific.
  *
  * Limitations:
@@ -125,11 +131,16 @@ function calcProgress(item: DownloadingItem): number {
  *                       (use status or status4k depending on is4k)
  * @param downloads      DownloadingItem[] from the DownloadTracker for this
  *                       media item
+ * @param recentlyDownloaded  When true, indicates the media was recently
+ *                       tracked in the download queue.  This bridges the gap
+ *                       between the queue item being removed after import and
+ *                       Seerr updating MediaStatus to AVAILABLE.
  */
 export function computeEnhancedStatus(
   requestStatus: MediaRequestStatus,
   mediaStatus: MediaStatus,
-  downloads: DownloadingItem[]
+  downloads: DownloadingItem[],
+  recentlyDownloaded = false
 ): EnhancedStatus {
   // ── 1. Already available ────────────────────────────────────────────────
   if (mediaStatus === MediaStatus.AVAILABLE) {
@@ -197,7 +208,12 @@ export function computeEnhancedStatus(
 
   // ── 5-7. No active downloads ─────────────────────────────────────────────
 
-  // 5. In *arr but no file and not downloading → most likely waiting for release
+  // 5a. Recently had a download that just left the queue → import is completing
+  if (mediaStatus === MediaStatus.PROCESSING && recentlyDownloaded) {
+    return { status: 'importing', label: 'Importing' };
+  }
+
+  // 5b. In *arr but no file and not downloading → most likely waiting for release
   if (mediaStatus === MediaStatus.PROCESSING) {
     return { status: 'waiting_for_release', label: 'Waiting for Release' };
   }

@@ -279,9 +279,12 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
         const downloads = r.is4k
           ? (r.media.downloadStatus4k ?? [])
           : (r.media.downloadStatus ?? []);
+        const recentlyDownloaded = r.is4k
+          ? (r.media.recentlyDownloaded4k ?? false)
+          : (r.media.recentlyDownloaded ?? false);
         return {
           ...r,
-          enhancedStatus: computeEnhancedStatus(r.status, mediaStatus, downloads),
+          enhancedStatus: computeEnhancedStatus(r.status, mediaStatus, downloads, recentlyDownloaded),
         };
       });
 
@@ -472,7 +475,10 @@ requestRoutes.get('/:requestId', async (req, res, next) => {
         request.is4k ? request.media.status4k : request.media.status,
         request.is4k
           ? (request.media.downloadStatus4k ?? [])
-          : (request.media.downloadStatus ?? [])
+          : (request.media.downloadStatus ?? []),
+        request.is4k
+          ? (request.media.recentlyDownloaded4k ?? false)
+          : (request.media.recentlyDownloaded ?? false)
       ),
     });
   } catch (e) {
