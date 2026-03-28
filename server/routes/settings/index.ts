@@ -41,6 +41,7 @@ import semver from 'semver';
 import { URL } from 'url';
 import metadataRoutes from './metadata';
 import notificationRoutes from './notifications';
+import bazarrRoutes from './bazarr';
 import radarrRoutes from './radarr';
 import sonarrRoutes from './sonarr';
 
@@ -49,6 +50,7 @@ const settingsRoutes = Router();
 settingsRoutes.use('/notifications', notificationRoutes);
 settingsRoutes.use('/radarr', radarrRoutes);
 settingsRoutes.use('/sonarr', sonarrRoutes);
+settingsRoutes.use('/bazarr', bazarrRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 

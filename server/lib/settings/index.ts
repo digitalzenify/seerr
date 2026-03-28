@@ -102,6 +102,16 @@ export interface SonarrSettings extends DVRSettings {
   monitorNewItems: 'all' | 'none';
 }
 
+export interface BazarrSettings {
+  id: number;
+  name: string;
+  hostname: string;
+  port: number;
+  apiKey: string;
+  useSsl: boolean;
+  baseUrl?: string;
+}
+
 interface Quota {
   quotaLimit?: number;
   quotaDays?: number;
@@ -368,6 +378,7 @@ export interface AllSettings {
   tautulli: TautulliSettings;
   radarr: RadarrSettings[];
   sonarr: SonarrSettings[];
+  bazarr: BazarrSettings[];
   public: PublicSettings;
   notifications: NotificationSettings;
   jobs: Record<JobId, JobSettings>;
@@ -441,6 +452,7 @@ class Settings {
       },
       radarr: [],
       sonarr: [],
+      bazarr: [],
       public: {
         initialized: false,
       },
@@ -671,6 +683,14 @@ class Settings {
 
   set sonarr(data: SonarrSettings[]) {
     this.data.sonarr = data;
+  }
+
+  get bazarr(): BazarrSettings[] {
+    return this.data.bazarr;
+  }
+
+  set bazarr(data: BazarrSettings[]) {
+    this.data.bazarr = data;
   }
 
   get public(): PublicSettings {
