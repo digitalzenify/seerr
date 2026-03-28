@@ -2,7 +2,7 @@ import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
 import TautulliAPI from '@server/api/tautulli';
 import cacheManager from '@server/lib/cache';
-import { MediaType } from '@server/constants/media';
+import { MediaStatus, MediaType } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import { UserType } from '@server/constants/user';
 import dataSource, { getRepository } from '@server/datasource';
@@ -1033,12 +1033,14 @@ router.get<{ id: string }, UserStatisticsResponse>(
       });
       stats.requestsMade = totalRequests;
 
-      // Count fulfilled requests (status 2 = AVAILABLE)
+      // Count fulfilled requests (PARTIALLY_AVAILABLE = 4 or AVAILABLE = 5)
       const fulfilledRequests = await requestRepo
         .createQueryBuilder('request')
         .innerJoin('request.media', 'media')
         .where('request.requestedBy = :userId', { userId: user.id })
-        .andWhere('media.status = :status', { status: 4 }) // AVAILABLE
+        .andWhere('media.status IN (:...statuses)', {
+          statuses: [MediaStatus.PARTIALLY_AVAILABLE, MediaStatus.AVAILABLE],
+        })
         .getCount();
       stats.requestsFulfilled = fulfilledRequests;
 
