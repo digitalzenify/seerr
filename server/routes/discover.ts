@@ -1025,40 +1025,30 @@ discoverRoutes.get(
     try {
       const user = req.user;
       if (!user?.jellyfinUserId) {
-        // Fallback: return trending for users without Jellyfin history
+        // Fallback: return trending movies for users without Jellyfin history
         const tmdb = createTmdbWithRegionLanguage(user);
-        const trending = await tmdb.getTrending({ page: 1 });
+        const trending = await tmdb.getMovieTrending({ page: 1 });
         const media = await Media.getRelatedMedia(
           req.user,
-          trending.results.map((r) => ({
+          trending.results.map((r: TmdbMovieResult) => ({
             tmdbId: r.id,
-            mediaType:
-              r.media_type === 'movie' ? MediaType.MOVIE : MediaType.TV,
+            mediaType: MediaType.MOVIE,
           }))
         );
         return res.status(200).json({
           page: 1,
           totalPages: 1,
           totalResults: trending.results.length,
-          results: trending.results.map((result) => {
-            if (result.media_type === 'movie') {
-              return mapMovieResult(
-                result as TmdbMovieResult,
-                media.find(
-                  (m) =>
-                    m.tmdbId === result.id &&
-                    m.mediaType === MediaType.MOVIE
-                )
-              );
-            }
-            return mapTvResult(
-              result as TmdbTvResult,
+          results: trending.results.map((result: TmdbMovieResult) =>
+            mapMovieResult(
+              result,
               media.find(
                 (m) =>
-                  m.tmdbId === result.id && m.mediaType === MediaType.TV
+                  m.tmdbId === result.id &&
+                  m.mediaType === MediaType.MOVIE
               )
-            );
-          }),
+            )
+          ),
         });
       }
 
@@ -1125,40 +1115,30 @@ discoverRoutes.get(
       const recentlyPlayed = await jf.getRecentlyPlayed(15);
 
       if (!recentlyPlayed.length) {
-        // No watch history - return trending as fallback
+        // No watch history - return trending movies as fallback
         const tmdb = createTmdbWithRegionLanguage(user);
-        const trending = await tmdb.getTrending({ page: 1 });
+        const trending = await tmdb.getMovieTrending({ page: 1 });
         const media = await Media.getRelatedMedia(
           req.user,
-          trending.results.map((r) => ({
+          trending.results.map((r: TmdbMovieResult) => ({
             tmdbId: r.id,
-            mediaType:
-              r.media_type === 'movie' ? MediaType.MOVIE : MediaType.TV,
+            mediaType: MediaType.MOVIE,
           }))
         );
         return res.status(200).json({
           page: 1,
           totalPages: 1,
           totalResults: trending.results.length,
-          results: trending.results.map((result) => {
-            if (result.media_type === 'movie') {
-              return mapMovieResult(
-                result as TmdbMovieResult,
-                media.find(
-                  (m) =>
-                    m.tmdbId === result.id &&
-                    m.mediaType === MediaType.MOVIE
-                )
-              );
-            }
-            return mapTvResult(
-              result as TmdbTvResult,
+          results: trending.results.map((result: TmdbMovieResult) =>
+            mapMovieResult(
+              result,
               media.find(
                 (m) =>
-                  m.tmdbId === result.id && m.mediaType === MediaType.TV
+                  m.tmdbId === result.id &&
+                  m.mediaType === MediaType.MOVIE
               )
-            );
-          }),
+            )
+          ),
         });
       }
 

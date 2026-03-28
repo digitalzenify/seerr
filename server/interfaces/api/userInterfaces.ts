@@ -28,3 +28,29 @@ export interface UserWatchDataResponse {
   recentlyWatched: Media[];
   playCount: number;
 }
+
+export interface UserStatisticsResponse {
+  // Viewing Activity
+  totalMoviesWatched: number;
+  totalEpisodesWatched: number;
+  totalWatchTimeMinutes: number;
+  averageWatchTimePerWeekMinutes: number;
+
+  // Preferences & Patterns
+  topGenres: Array<{ name: string; count: number }>;
+  favoriteDecade: string | null;
+  topActors: Array<{ name: string; count: number }>;
+  topDirectors: Array<{ name: string; count: number }>;
+  mostWatchedShow: { name: string; episodeCount: number } | null;
+
+  // Fun / Engagement Stats
+  currentStreak: number;
+  longestStreak: number;
+  requestsMade: number;
+  requestsFulfilled: number;
+  mostRecentWatch: { title: string; date: string } | null;
+
+  // Time-Based Insights
+  preferredWatchingHour: number | null;
+  mostActiveDay: string | null;
+}

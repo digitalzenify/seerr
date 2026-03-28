@@ -1,6 +1,7 @@
 import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
 import TautulliAPI from '@server/api/tautulli';
+import cacheManager from '@server/lib/cache';
 import { MediaType } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import { UserType } from '@server/constants/user';
@@ -15,6 +16,7 @@ import type {
   QuotaResponse,
   UserRequestsResponse,
   UserResultsResponse,
+  UserStatisticsResponse,
   UserWatchDataResponse,
 } from '@server/interfaces/api/userInterfaces';
 import { Permission, hasPermission } from '@server/lib/permissions';
@@ -978,6 +980,341 @@ router.get<{ id: string }, WatchlistResponse>(
         tmdbId: item.tmdbId,
       })),
     });
+  }
+);
+
+/**
+ * GET /:id/statistics
+ * Returns detailed viewing statistics for the user.
+ * Data is sourced from Jellyfin watch history and Seerr request history.
+ * Results are cached per-user for 24 hours.
+ */
+router.get<{ id: string }, UserStatisticsResponse>(
+  '/:id/statistics',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    try {
+      const cache = cacheManager.getCache('user-stats').data;
+      const cacheKey = `stats-${req.params.id}`;
+      const cached = cache.get<UserStatisticsResponse>(cacheKey);
+
+      if (cached) {
+        return res.status(200).json(cached);
+      }
+
+      const user = await getRepository(User).findOneOrFail({
+        where: { id: Number(req.params.id) },
+      });
+
+      // Initialize stats
+      const stats: UserStatisticsResponse = {
+        totalMoviesWatched: 0,
+        totalEpisodesWatched: 0,
+        totalWatchTimeMinutes: 0,
+        averageWatchTimePerWeekMinutes: 0,
+        topGenres: [],
+        favoriteDecade: null,
+        topActors: [],
+        topDirectors: [],
+        mostWatchedShow: null,
+        currentStreak: 0,
+        longestStreak: 0,
+        requestsMade: 0,
+        requestsFulfilled: 0,
+        mostRecentWatch: null,
+        preferredWatchingHour: null,
+        mostActiveDay: null,
+      };
+
+      // Get request statistics from the database
+      const requestRepo = getRepository(MediaRequest);
+      const totalRequests = await requestRepo.count({
+        where: { requestedBy: { id: user.id } },
+      });
+      stats.requestsMade = totalRequests;
+
+      // Count fulfilled requests (status 2 = AVAILABLE)
+      const fulfilledRequests = await requestRepo
+        .createQueryBuilder('request')
+        .innerJoin('request.media', 'media')
+        .where('request.requestedBy = :userId', { userId: user.id })
+        .andWhere('media.status = :status', { status: 4 }) // AVAILABLE
+        .getCount();
+      stats.requestsFulfilled = fulfilledRequests;
+
+      // Fetch Jellyfin watch data if the user has a Jellyfin account
+      if (user.jellyfinUserId) {
+        const settings = getSettings();
+        const jf = settings.jellyfin;
+        if (jf.ip && jf.apiKey) {
+          const protocol = jf.useSsl ? 'https' : 'http';
+          const urlBase = jf.urlBase
+            ? `/${jf.urlBase.replace(/^\//, '')}`
+            : '';
+          const baseUrl = `${protocol}://${jf.ip}:${jf.port}${urlBase}`;
+
+          const jellyfinClient = new JellyfinAPI(baseUrl, jf.apiKey);
+          jellyfinClient.setUserId(user.jellyfinUserId);
+
+          // Fetch played movies
+          const movies = await jellyfinClient.getPlayedItems({
+            includeItemTypes: 'Movie',
+            fields:
+              'Genres,People,RunTimeTicks,DateCreated,PremiereDate,DatePlayed',
+            limit: 500,
+          });
+
+          // Fetch played episodes
+          const episodes = await jellyfinClient.getPlayedItems({
+            includeItemTypes: 'Episode',
+            fields:
+              'Genres,People,RunTimeTicks,DateCreated,SeriesName,DatePlayed',
+            limit: 1000,
+          });
+
+          stats.totalMoviesWatched = movies.TotalRecordCount;
+          stats.totalEpisodesWatched = episodes.TotalRecordCount;
+
+          const allItems = [...movies.Items, ...episodes.Items];
+
+          // Calculate total watch time
+          let totalTicksWatched = 0;
+          const genreCounts = new Map<string, number>();
+          const actorCounts = new Map<string, number>();
+          const directorCounts = new Map<string, number>();
+          const showEpisodeCounts = new Map<string, number>();
+          const decadeCounts = new Map<string, number>();
+          const playDates: Date[] = [];
+          const hourCounts = new Map<number, number>();
+          const dayCounts = new Map<string, number>();
+          const dayNames = [
+            'Sunday',
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+            'Saturday',
+          ];
+
+          for (const item of allItems) {
+            // Watch time
+            if (item.RunTimeTicks) {
+              totalTicksWatched += item.RunTimeTicks;
+            }
+
+            // Genres
+            if (item.Genres) {
+              for (const genre of item.Genres) {
+                genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + 1);
+              }
+            }
+
+            // People (actors, directors)
+            if (item.People) {
+              for (const person of item.People) {
+                if (person.Type === 'Actor' && person.Name) {
+                  actorCounts.set(
+                    person.Name,
+                    (actorCounts.get(person.Name) ?? 0) + 1
+                  );
+                }
+                if (person.Type === 'Director' && person.Name) {
+                  directorCounts.set(
+                    person.Name,
+                    (directorCounts.get(person.Name) ?? 0) + 1
+                  );
+                }
+              }
+            }
+
+            // Show episode counts
+            if (item.SeriesName) {
+              showEpisodeCounts.set(
+                item.SeriesName,
+                (showEpisodeCounts.get(item.SeriesName) ?? 0) + 1
+              );
+            }
+
+            // Decade counting (from release date)
+            const premiereDate = item.PremiereDate || item.DateCreated;
+            if (premiereDate) {
+              const year = new Date(premiereDate).getFullYear();
+              const decade = `${Math.floor(year / 10) * 10}s`;
+              decadeCounts.set(
+                decade,
+                (decadeCounts.get(decade) ?? 0) + 1
+              );
+            }
+
+            // Play date tracking for streaks and time insights
+            const datePlayed = item.DatePlayed || item.DateCreated;
+            if (datePlayed) {
+              const playDate = new Date(datePlayed);
+              playDates.push(playDate);
+
+              // Hour tracking
+              const hour = playDate.getHours();
+              hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1);
+
+              // Day tracking
+              const dayName = dayNames[playDate.getDay()];
+              dayCounts.set(dayName, (dayCounts.get(dayName) ?? 0) + 1);
+            }
+          }
+
+          // Convert ticks to minutes (1 tick = 100 nanoseconds = 1e-7 seconds)
+          stats.totalWatchTimeMinutes = Math.round(
+            totalTicksWatched / 10_000_000 / 60
+          );
+
+          // Average watch time per week
+          if (playDates.length > 0) {
+            const sortedDates = playDates.sort(
+              (a, b) => a.getTime() - b.getTime()
+            );
+            const firstWatch = sortedDates[0];
+            const now = new Date();
+            const weeksSinceFirst = Math.max(
+              1,
+              (now.getTime() - firstWatch.getTime()) / (7 * 24 * 60 * 60 * 1000)
+            );
+            stats.averageWatchTimePerWeekMinutes = Math.round(
+              stats.totalWatchTimeMinutes / weeksSinceFirst
+            );
+          }
+
+          // Top 5 genres
+          stats.topGenres = Array.from(genreCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([name, count]) => ({ name, count }));
+
+          // Favorite decade
+          if (decadeCounts.size > 0) {
+            stats.favoriteDecade = Array.from(decadeCounts.entries()).sort(
+              (a, b) => b[1] - a[1]
+            )[0][0];
+          }
+
+          // Top 5 actors
+          stats.topActors = Array.from(actorCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([name, count]) => ({ name, count }));
+
+          // Top 5 directors
+          stats.topDirectors = Array.from(directorCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([name, count]) => ({ name, count }));
+
+          // Most watched show
+          if (showEpisodeCounts.size > 0) {
+            const [showName, episodeCount] = Array.from(
+              showEpisodeCounts.entries()
+            ).sort((a, b) => b[1] - a[1])[0];
+            stats.mostWatchedShow = {
+              name: showName,
+              episodeCount,
+            };
+          }
+
+          // Most recent watch
+          if (allItems.length > 0) {
+            const mostRecent = allItems[0];
+            stats.mostRecentWatch = {
+              title:
+                mostRecent.SeriesName
+                  ? `${mostRecent.SeriesName} - ${mostRecent.Name}`
+                  : mostRecent.Name,
+              date: mostRecent.DatePlayed || mostRecent.DateCreated || '',
+            };
+          }
+
+          // Streaks (consecutive days with at least one watch)
+          if (playDates.length > 0) {
+            const uniqueDays = new Set<string>();
+            for (const date of playDates) {
+              uniqueDays.add(date.toISOString().split('T')[0]);
+            }
+            const sortedDays = Array.from(uniqueDays).sort();
+
+            let currentStreak = 0;
+            let longestStreak = 0;
+            let tempStreak = 1;
+
+            const today = new Date().toISOString().split('T')[0];
+            const yesterday = new Date(Date.now() - 86400000)
+              .toISOString()
+              .split('T')[0];
+
+            for (let i = 1; i < sortedDays.length; i++) {
+              const prev = new Date(sortedDays[i - 1]);
+              const curr = new Date(sortedDays[i]);
+              const diffDays = Math.round(
+                (curr.getTime() - prev.getTime()) / 86400000
+              );
+
+              if (diffDays === 1) {
+                tempStreak++;
+              } else {
+                longestStreak = Math.max(longestStreak, tempStreak);
+                tempStreak = 1;
+              }
+            }
+            longestStreak = Math.max(longestStreak, tempStreak);
+
+            // Check if current streak includes today or yesterday
+            const lastDay = sortedDays[sortedDays.length - 1];
+            if (lastDay === today || lastDay === yesterday) {
+              tempStreak = 1;
+              for (let i = sortedDays.length - 2; i >= 0; i--) {
+                const curr = new Date(sortedDays[i + 1]);
+                const prev = new Date(sortedDays[i]);
+                const diffDays = Math.round(
+                  (curr.getTime() - prev.getTime()) / 86400000
+                );
+                if (diffDays === 1) {
+                  tempStreak++;
+                } else {
+                  break;
+                }
+              }
+              currentStreak = tempStreak;
+            }
+
+            stats.currentStreak = currentStreak;
+            stats.longestStreak = longestStreak;
+          }
+
+          // Preferred watching hour
+          if (hourCounts.size > 0) {
+            stats.preferredWatchingHour = Array.from(
+              hourCounts.entries()
+            ).sort((a, b) => b[1] - a[1])[0][0];
+          }
+
+          // Most active day
+          if (dayCounts.size > 0) {
+            stats.mostActiveDay = Array.from(dayCounts.entries()).sort(
+              (a, b) => b[1] - a[1]
+            )[0][0];
+          }
+        }
+      }
+
+      // Cache the result
+      cache.set(cacheKey, stats);
+
+      return res.status(200).json(stats);
+    } catch (e) {
+      logger.error('Failed to generate user statistics', {
+        label: 'User',
+        message: e.message,
+      });
+      next({ status: 500, message: 'Failed to generate statistics.' });
+    }
   }
 );
 

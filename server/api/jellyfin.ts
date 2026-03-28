@@ -488,6 +488,54 @@ class JellyfinAPI extends ExternalAPI {
     }
   }
 
+  public async getPlayedItems(options?: {
+    includeItemTypes?: string;
+    fields?: string;
+    limit?: number;
+    startIndex?: number;
+  }): Promise<{ Items: any[]; TotalRecordCount: number }> {
+    try {
+      const endpoint =
+        this.mediaServerType === MediaServerType.JELLYFIN
+          ? `/Items`
+          : `/Users/${this.userId}/Items`;
+
+      const params: Record<string, string> = {
+        SortBy: 'DatePlayed',
+        SortOrder: 'Descending',
+        IncludeItemTypes: options?.includeItemTypes ?? 'Movie,Episode',
+        Recursive: 'true',
+        IsPlayed: 'true',
+        fields:
+          options?.fields ??
+          'ProviderIds,Genres,People,RunTimeTicks,DateCreated,SeriesName',
+      };
+
+      if (options?.limit) {
+        params.Limit = String(options.limit);
+      }
+      if (options?.startIndex) {
+        params.StartIndex = String(options.startIndex);
+      }
+
+      if (this.mediaServerType === MediaServerType.JELLYFIN) {
+        params.userId = this.userId ?? 'Me';
+      }
+
+      const response = await this.get<any>(endpoint, { params });
+      return {
+        Items: response.Items ?? [],
+        TotalRecordCount: response.TotalRecordCount ?? 0,
+      };
+    } catch (e) {
+      logger.error(
+        `Something went wrong while getting played items from the Jellyfin server: ${e.message}`,
+        { label: 'Jellyfin API', error: e?.response?.status }
+      );
+      return { Items: [], TotalRecordCount: 0 };
+    }
+  }
+
   public async createApiToken(appName: string): Promise<string> {
     try {
       await this.post(`/Auth/Keys?App=${appName}`);

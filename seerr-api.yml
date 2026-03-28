@@ -5363,6 +5363,98 @@ paths:
                       $ref: '#/components/schemas/MediaInfo'
                   playCount:
                     type: number
+  /user/{userId}/statistics:
+    get:
+      summary: Get user viewing statistics
+      description: |
+        Returns detailed viewing statistics for the user including watch counts,
+        favorite genres, streaks, and time-based insights.
+        Data is sourced from Jellyfin watch history and request history.
+        Results are cached per-user for 24 hours.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: User statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalMoviesWatched:
+                    type: number
+                  totalEpisodesWatched:
+                    type: number
+                  totalWatchTimeMinutes:
+                    type: number
+                  averageWatchTimePerWeekMinutes:
+                    type: number
+                  topGenres:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        count:
+                          type: number
+                  favoriteDecade:
+                    type: string
+                    nullable: true
+                  topActors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        count:
+                          type: number
+                  topDirectors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        count:
+                          type: number
+                  mostWatchedShow:
+                    type: object
+                    nullable: true
+                    properties:
+                      name:
+                        type: string
+                      episodeCount:
+                        type: number
+                  currentStreak:
+                    type: number
+                  longestStreak:
+                    type: number
+                  requestsMade:
+                    type: number
+                  requestsFulfilled:
+                    type: number
+                  mostRecentWatch:
+                    type: object
+                    nullable: true
+                    properties:
+                      title:
+                        type: string
+                      date:
+                        type: string
+                  preferredWatchingHour:
+                    type: number
+                    nullable: true
+                  mostActiveDay:
+                    type: string
+                    nullable: true
   /search:
     get:
       summary: Search for movies, TV shows, or people

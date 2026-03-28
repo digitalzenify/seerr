@@ -6,6 +6,7 @@ import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
 import {
+  ChartBarSquareIcon,
   ClockIcon,
   CogIcon,
   ExclamationTriangleIcon,
@@ -27,6 +28,7 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   browsemovies: 'Movies',
   browsetv: 'Series',
   requests: 'Requests',
+  statistics: 'Statistics',
   blocklist: 'Blocklist',
   issues: 'Issues',
   users: 'Users',
@@ -77,6 +79,12 @@ const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'requests',
     svgIcon: <ClockIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/requests/,
+  },
+  {
+    href: '/profile/statistics',
+    messagesKey: 'statistics',
+    svgIcon: <ChartBarSquareIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/(profile|users\/\d+)\/statistics/,
   },
   {
     href: '/blocklist',
