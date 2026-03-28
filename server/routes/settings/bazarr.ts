@@ -29,9 +29,7 @@ bazarrRoutes.post<
   BazarrSettings
 >('/test', async (req, res, next) => {
   try {
-    const protocol = req.body.useSsl ? 'https' : 'http';
-    const baseUrl = req.body.baseUrl ? `/${req.body.baseUrl.replace(/^\//, '')}` : '';
-    const url = `${protocol}://${req.body.hostname}:${req.body.port}${baseUrl}`;
+    const url = BazarrAPI.buildUrl(req.body);
 
     const bazarr = new BazarrAPI(url, req.body.apiKey);
     const status = await bazarr.getSystemStatus();

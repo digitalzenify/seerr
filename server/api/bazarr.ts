@@ -36,6 +36,21 @@ export interface BazarrSystemStatusResponse {
 }
 
 class BazarrAPI extends ExternalAPI {
+  public static buildUrl(
+    settings: {
+      hostname: string;
+      port: number;
+      useSsl: boolean;
+      baseUrl?: string;
+    },
+  ): string {
+    const protocol = settings.useSsl ? 'https' : 'http';
+    const baseUrl = settings.baseUrl
+      ? `/${settings.baseUrl.replace(/^\//, '')}`
+      : '';
+    return `${protocol}://${settings.hostname}:${settings.port}${baseUrl}`;
+  }
+
   constructor(url: string, apiKey: string) {
     super(url, {}, { headers: { 'X-API-KEY': apiKey } });
   }

@@ -396,11 +396,7 @@ mediaRoutes.get<{ id: string }, MediaWatchDataResponse>(
 function getBazarrClient(): BazarrAPI | undefined {
   const bazarrSettings = getSettings().bazarr[0];
   if (!bazarrSettings) return undefined;
-  const protocol = bazarrSettings.useSsl ? 'https' : 'http';
-  const baseUrl = bazarrSettings.baseUrl
-    ? `/${bazarrSettings.baseUrl.replace(/^\//, '')}`
-    : '';
-  const url = `${protocol}://${bazarrSettings.hostname}:${bazarrSettings.port}${baseUrl}`;
+  const url = BazarrAPI.buildUrl(bazarrSettings);
   return new BazarrAPI(url, bazarrSettings.apiKey);
 }
 
@@ -474,10 +470,19 @@ mediaRoutes.get<{ id: string }>(
       if (contentDisposition) {
         res.setHeader('Content-Disposition', contentDisposition);
       } else {
+        // Derive file extension from content-type when possible
+        const ext =
+          contentType === 'video/x-matroska'
+            ? 'mkv'
+            : contentType === 'video/mp4'
+              ? 'mp4'
+              : contentType === 'video/x-msvideo'
+                ? 'avi'
+                : 'mkv';
         const safeName = (media.tmdbId ?? 'media').toString();
         res.setHeader(
           'Content-Disposition',
-          `attachment; filename="media-${safeName}.mkv"`
+          `attachment; filename="media-${safeName}.${ext}"`
         );
       }
 
