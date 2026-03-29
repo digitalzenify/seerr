@@ -1,4 +1,4 @@
-import IMDBRadarrProxy from '@server/api/rating/imdbRadarrProxy';
+import IMDBApi from '@server/api/rating/imdbapi';
 import RottenTomatoes from '@server/api/rating/rottentomatoes';
 import { type RatingResponse } from '@server/api/ratings';
 import TheMovieDb from '@server/api/themoviedb';
@@ -190,7 +190,7 @@ movieRoutes.get('/:id/ratings', async (req, res, next) => {
 movieRoutes.get('/:id/ratingscombined', async (req, res, next) => {
   const tmdb = new TheMovieDb();
   const rtapi = new RottenTomatoes();
-  const imdbApi = new IMDBRadarrProxy();
+  const imdbApi = new IMDBApi();
 
   try {
     const movie = await tmdb.getMovie({
