@@ -1,6 +1,6 @@
 import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
-import IMDBRadarrProxy from '@server/api/rating/imdbRadarrProxy';
+import IMDBApi from '@server/api/rating/imdbapi';
 import RottenTomatoes from '@server/api/rating/rottentomatoes';
 import type { SortOptions } from '@server/api/themoviedb';
 import TheMovieDb from '@server/api/themoviedb';
@@ -1358,7 +1358,7 @@ discoverRoutes.get('/ratings', async (req, res, next) => {
     const imdbCache = cacheManager.getCache('imdb-discover').data;
     const rtCache = cacheManager.getCache('rt-discover').data;
     const tmdb = createTmdbWithRegionLanguage(req.user);
-    const imdbApi = new IMDBRadarrProxy();
+    const imdbApi = new IMDBApi();
     const rtApi = new RottenTomatoes();
 
     const ratings: Record<
