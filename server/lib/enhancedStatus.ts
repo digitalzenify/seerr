@@ -7,8 +7,8 @@
  *
  * Heuristics (evaluated in priority order):
  *
- * 1. AVAILABLE / PARTIALLY_AVAILABLE  — driven purely by MediaStatus; no
- *    download data is needed.
+ * 1. FULLY AVAILABLE — driven purely by MediaStatus.AVAILABLE; no download
+ *    data is needed.
  *
  * 2. ATTENTION_NEEDED — any queue item whose trackedDownloadStatus is
  *    'warning' or 'error'. Only raised when there is a concrete signal from
@@ -23,22 +23,27 @@
  *    Progress (0-100), sizeLeft, timeLeft, and ETA are included when
  *    available.
  *
- * 5. IMPORTING (post-queue) — MediaStatus.PROCESSING + no active downloads +
+ * 5. PARTIALLY_AVAILABLE — MediaStatus.PARTIALLY_AVAILABLE with no active
+ *    downloads. Checked after download states so that a partially available
+ *    show with new seasons downloading correctly shows download progress
+ *    instead of a misleading "Partially Available".
+ *
+ * 6. IMPORTING (post-queue) — MediaStatus.PROCESSING + no active downloads +
  *    the item was recently tracked in the download queue.  This bridges the
  *    gap between the queue item being removed (import done in *arr) and
  *    Seerr updating MediaStatus to AVAILABLE.
  *
- * 6. WAITING_FOR_RELEASE — MediaStatus.PROCESSING + no active downloads +
+ * 7. WAITING_FOR_RELEASE — MediaStatus.PROCESSING + no active downloads +
  *    the item was NOT recently in the download queue.
  *    The item has been added to Radarr/Sonarr (monitored) but no file
  *    exists and nothing is in the queue. The most common cause is a future
  *    release date or a release that hasn't been indexed yet.
  *
- * 7. WAITING_FOR_MATCH — MediaStatus.UNKNOWN + request is APPROVED.
+ * 8. WAITING_FOR_MATCH — MediaStatus.UNKNOWN + request is APPROVED.
  *    The item has not yet been picked up by the *arr scanner, meaning it
  *    either hasn't synced yet or truly has no indexer match.
  *
- * 8. REQUESTED — catch-all for PENDING requests and any edge-cases where
+ * 9. REQUESTED — catch-all for PENDING requests and any edge-cases where
  *    not enough downstream state exists to be more specific.
  *
  * Limitations:
@@ -142,16 +147,14 @@ export function computeEnhancedStatus(
   downloads: DownloadingItem[],
   recentlyDownloaded = false
 ): EnhancedStatus {
-  // ── 1. Already available ────────────────────────────────────────────────
+  // ── 1. Fully available ──────────────────────────────────────────────────
   if (mediaStatus === MediaStatus.AVAILABLE) {
     return { status: 'available', label: 'Available' };
   }
 
-  if (mediaStatus === MediaStatus.PARTIALLY_AVAILABLE) {
-    return { status: 'partially_available', label: 'Partially Available' };
-  }
-
   // ── 2-4. Active queue items ──────────────────────────────────────────────
+  // Checked BEFORE PARTIALLY_AVAILABLE so that a show with some seasons
+  // already available still shows download progress for new seasons.
   if (downloads.length > 0) {
     // 2. Attention needed: any queue item has a concrete error/warning signal
     const hasError = downloads.some((d) =>
@@ -206,19 +209,24 @@ export function computeEnhancedStatus(
     };
   }
 
-  // ── 5-7. No active downloads ─────────────────────────────────────────────
+  // ── 5. Partially available (no active downloads) ─────────────────────────
+  if (mediaStatus === MediaStatus.PARTIALLY_AVAILABLE) {
+    return { status: 'partially_available', label: 'Partially Available' };
+  }
 
-  // 5a. Recently had a download that just left the queue → import is completing
+  // ── 6-8. No active downloads ─────────────────────────────────────────────
+
+  // 6. Recently had a download that just left the queue → import is completing
   if (mediaStatus === MediaStatus.PROCESSING && recentlyDownloaded) {
     return { status: 'importing', label: 'Importing' };
   }
 
-  // 5b. In *arr but no file and not downloading → most likely waiting for release
+  // 7. In *arr but no file and not downloading → most likely waiting for release
   if (mediaStatus === MediaStatus.PROCESSING) {
     return { status: 'waiting_for_release', label: 'Waiting for Release' };
   }
 
-  // 6. Approved but not yet picked up by the *arr scanner
+  // 8. Approved but not yet picked up by the *arr scanner
   if (
     requestStatus === MediaRequestStatus.APPROVED &&
     (mediaStatus === MediaStatus.UNKNOWN || mediaStatus === MediaStatus.PENDING)
@@ -226,6 +234,6 @@ export function computeEnhancedStatus(
     return { status: 'waiting_for_match', label: 'Waiting for a Match' };
   }
 
-  // 7. Pending approval or any other fallback
+  // 9. Pending approval or any other fallback
   return { status: 'requested', label: 'Requested' };
 }

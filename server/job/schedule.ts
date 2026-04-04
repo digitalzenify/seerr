@@ -219,6 +219,38 @@ export const startJobs = (): void => {
     });
   });
 
+  // ── Post-import library scan trigger ───────────────────────────────────
+  // When a download leaves the Sonarr/Radarr queue (import completed),
+  // schedule a targeted media-server library scan ~60 seconds later.
+  // This bridges the gap between the download completing and Seerr
+  // detecting the newly available media, preventing the status from
+  // getting stuck on "Waiting for Release".
+  let pendingScanTimeout: ReturnType<typeof setTimeout> | null = null;
+  const POST_IMPORT_SCAN_DELAY_MS = 60_000; // 1 minute
+
+  downloadTracker.onDownloadsCompleted = () => {
+    // Debounce: if multiple downloads complete in quick succession we only
+    // need a single scan.
+    if (pendingScanTimeout) {
+      return;
+    }
+    pendingScanTimeout = setTimeout(() => {
+      pendingScanTimeout = null;
+      logger.info(
+        'Triggering post-import library scan after download completion',
+        { label: 'Jobs' }
+      );
+      if (mediaServerType === MediaServerType.PLEX) {
+        plexRecentScanner.run();
+      } else if (
+        mediaServerType === MediaServerType.JELLYFIN ||
+        mediaServerType === MediaServerType.EMBY
+      ) {
+        jellyfinRecentScanner.run();
+      }
+    }, POST_IMPORT_SCAN_DELAY_MS);
+  };
+
   // Reset download sync everyday at 01:00 am
   scheduledJobs.push({
     id: 'download-sync-reset',

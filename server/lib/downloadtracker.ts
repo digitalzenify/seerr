@@ -43,8 +43,24 @@ class DownloadTracker {
    */
   private recentlyCompleted: Map<string, number> = new Map();
 
-  /** How long a "recently completed" entry is kept (5 minutes). */
-  private static readonly RECENTLY_COMPLETED_TTL_MS = 5 * 60 * 1000;
+  /**
+   * Optional callback invoked when one or more downloads leave the queue.
+   * Used to trigger a targeted media-server library scan so that Seerr
+   * can detect the newly imported media faster.
+   */
+  public onDownloadsCompleted: (() => void) | null = null;
+
+  /**
+   * How long a "recently completed" entry is kept (15 minutes).
+   *
+   * This must be longer than the Jellyfin/Plex recently-added scanner
+   * interval (default: every 5 minutes) to bridge the gap between a
+   * download leaving the Sonarr/Radarr queue and Seerr updating the
+   * MediaStatus to AVAILABLE.  With the previous 5-minute TTL the entry
+   * could expire before the library scanner ran, causing the status to
+   * fall back to "Waiting for Release".
+   */
+  private static readonly RECENTLY_COMPLETED_TTL_MS = 15 * 60 * 1000;
 
   public getMovieProgress(
     serverId: number,
@@ -138,6 +154,19 @@ class DownloadTracker {
     for (const key of prevSonarrIds) {
       if (!newSonarrIds.has(key)) {
         this.recentlyCompleted.set(key, now);
+      }
+    }
+
+    // Notify listener when downloads have left the queue so a targeted
+    // media-server library scan can be triggered promptly.
+    const hasNewCompletions =
+      [...prevRadarrIds].some((k) => !newRadarrIds.has(k)) ||
+      [...prevSonarrIds].some((k) => !newSonarrIds.has(k));
+    if (hasNewCompletions && this.onDownloadsCompleted) {
+      try {
+        this.onDownloadsCompleted();
+      } catch {
+        // Fire-and-forget; errors are logged by the callback itself.
       }
     }
 
