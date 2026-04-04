@@ -7787,6 +7787,29 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/SonarrSeries'
+  /service/webhook:
+    post:
+      summary: Sonarr/Radarr webhook endpoint
+      description: >-
+        Receives webhook notifications from Sonarr and Radarr.
+        Configure a Webhook connection in Sonarr/Radarr pointing to this
+        endpoint with the X-API-Key header set to your Seerr API key.
+        Triggers an immediate download-tracker refresh for near-instant
+        status updates.
+      tags:
+        - service
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                eventType:
+                  type: string
+                  example: Download
+      responses:
+        '204':
+          description: Webhook received successfully
   /regions:
     get:
       summary: Regions supported by TMDB
