@@ -36,6 +36,75 @@ Check out our documentation for instructions on how to install and run Seerr:
 
 https://docs.seerr.dev/getting-started/
 
+## Real-Time Status Updates via Webhooks
+
+By default Seerr polls Sonarr and Radarr once per minute to update download
+status. You can get near-instant status transitions (Requested → Downloading →
+Importing → Available) by configuring Sonarr and Radarr to push a webhook
+notification to Seerr whenever a download or import event occurs.
+
+### How it works
+
+When Seerr receives a webhook it immediately re-fetches the Sonarr/Radarr
+queue, so the next time the browser polls (every 15 seconds) it will see the
+latest status. This is complemented by an automatic media-server library scan
+that Seerr triggers ~60 seconds after a download leaves the queue, which is
+what causes the status to transition from *Importing* to *Available*.
+
+### Webhook URL
+
+```
+http://<your-seerr-host>:<port>/api/v1/service/webhook
+```
+
+Example: `http://192.168.1.100:5055/api/v1/service/webhook`
+
+### Finding your Seerr API key
+
+1. Open Seerr in your browser.
+2. Go to **Settings → General**.
+3. Copy the value shown in the **API Key** field.
+
+### Configuring Radarr
+
+1. In Radarr, open **Settings → Connect**.
+2. Click the **+** button and choose **Webhook**.
+3. Fill in the form:
+   - **Name**: `Seerr` (or any name you prefer)
+   - **Notification Triggers**: enable **On Grab** and **On Import** (and optionally **On Download Failure**)
+   - **URL**: `http://<your-seerr-host>:<port>/api/v1/service/webhook`
+   - **Method**: `POST`
+4. Click **Add Header** and set:
+   - **Key**: `X-API-Key`
+   - **Value**: *(paste your Seerr API key)*
+5. Click **Test** — you should see a ✅ success indicator.
+6. Click **Save**.
+
+### Configuring Sonarr
+
+1. In Sonarr, open **Settings → Connect**.
+2. Click the **+** button and choose **Webhook**.
+3. Fill in the form:
+   - **Name**: `Seerr` (or any name you prefer)
+   - **Notification Triggers**: enable **On Grab** and **On Import** (and optionally **On Download Failure**)
+   - **URL**: `http://<your-seerr-host>:<port>/api/v1/service/webhook`
+   - **Method**: `POST`
+4. Click **Add Header** and set:
+   - **Key**: `X-API-Key`
+   - **Value**: *(paste your Seerr API key)*
+5. Click **Test** — you should see a ✅ success indicator.
+6. Click **Save**.
+
+### Notes
+
+- The webhook requires the `X-API-Key` header for authentication. Requests
+  without a valid key are rejected with `403 Forbidden`.
+- If Seerr is behind a reverse proxy (nginx, Traefik, Caddy, etc.), use your
+  **public URL** as the webhook URL (e.g. `https://seerr.yourdomain.com/api/v1/service/webhook`).
+  Make sure your proxy forwards the `X-API-Key` header.
+- The webhook is optional. Without it, Seerr falls back to its 60-second
+  polling cycle for status transitions.
+
 ## Preview
 
 <img src="./public/preview.jpg" alt="Seerr application preview" />
