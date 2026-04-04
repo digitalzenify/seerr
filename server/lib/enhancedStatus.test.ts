@@ -51,7 +51,7 @@ describe('computeEnhancedStatus', () => {
   });
 
   // ── Partially Available ────────────────────────────────────────────────
-  it('returns partially_available when MediaStatus is PARTIALLY_AVAILABLE', () => {
+  it('returns partially_available when MediaStatus is PARTIALLY_AVAILABLE and no downloads', () => {
     const result = computeEnhancedStatus(
       MediaRequestStatus.APPROVED,
       MediaStatus.PARTIALLY_AVAILABLE,
@@ -59,6 +59,40 @@ describe('computeEnhancedStatus', () => {
     );
     assert.equal(result.status, 'partially_available');
     assert.equal(result.label, 'Partially Available');
+  });
+
+  it('returns downloading when PARTIALLY_AVAILABLE but active downloads exist', () => {
+    const download = makeDownload({ size: 1000, sizeLeft: 400 }); // 60%
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PARTIALLY_AVAILABLE,
+      [download]
+    );
+    assert.equal(result.status, 'downloading');
+    assert.equal(result.progress, 60);
+  });
+
+  it('returns importing when PARTIALLY_AVAILABLE and download is in import state', () => {
+    const download = makeDownload({
+      trackedDownloadState: 'importPending',
+      status: 'completed',
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PARTIALLY_AVAILABLE,
+      [download]
+    );
+    assert.equal(result.status, 'importing');
+  });
+
+  it('returns attention_needed when PARTIALLY_AVAILABLE and download has error', () => {
+    const download = makeDownload({ trackedDownloadStatus: 'warning' });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PARTIALLY_AVAILABLE,
+      [download]
+    );
+    assert.equal(result.status, 'attention_needed');
   });
 
   // ── Downloading ────────────────────────────────────────────────────────
@@ -266,5 +300,21 @@ describe('computeEnhancedStatus', () => {
       [download]
     );
     assert.equal(result.status, 'available');
+  });
+
+  // ── Partially available does NOT take precedence over downloads ────────
+  it('returns downloading when partially available with active downloads (new season)', () => {
+    const download = makeDownload({
+      mediaType: MediaType.TV,
+      size: 2000,
+      sizeLeft: 1000,
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PARTIALLY_AVAILABLE,
+      [download]
+    );
+    assert.equal(result.status, 'downloading');
+    assert.equal(result.progress, 50);
   });
 });

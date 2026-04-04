@@ -61,6 +61,7 @@ const StatusBadge = ({
   if (
     mediaType &&
     plexUrl &&
+    !inProgress &&
     hasPermission(
       is4k
         ? [
@@ -92,6 +93,16 @@ const StatusBadge = ({
           : settings.currentSettings.mediaServerType === MediaServerType.PLEX
             ? 'Plex'
             : 'Jellyfin',
+    });
+  } else if (inProgress && mediaType && tmdbId) {
+    // When downloads are in progress, link to the details page so users
+    // can see download progress — especially important on mobile where
+    // tooltips are not accessible.
+    mediaLink = `/${mediaType}/${tmdbId}`;
+    mediaLinkDescription = intl.formatMessage(messages.managemedia, {
+      mediaType: intl.formatMessage(
+        mediaType === 'movie' ? globalMessages.movie : globalMessages.tvshow
+      ),
     });
   } else if (hasPermission(Permission.MANAGE_REQUESTS)) {
     if (mediaType && tmdbId) {
@@ -176,7 +187,7 @@ const StatusBadge = ({
           <Tooltip
             content={inProgress ? tooltipContent : mediaLinkDescription}
             className={`${
-              inProgress && 'hidden max-h-96 w-96 overflow-y-auto sm:block'
+              inProgress && 'max-h-96 w-96 overflow-y-auto'
             }`}
             tooltipConfig={{
               ...(inProgress && { interactive: true, delayHide: 100 }),
@@ -272,7 +283,7 @@ const StatusBadge = ({
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
           className={`${
-            inProgress && 'hidden max-h-96 w-96 overflow-y-auto sm:block'
+            inProgress && 'max-h-96 w-96 overflow-y-auto'
           }`}
           tooltipConfig={{
             ...(inProgress && { interactive: true, delayHide: 100 }),
@@ -337,7 +348,7 @@ const StatusBadge = ({
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
           className={`${
-            inProgress && 'hidden max-h-96 w-96 overflow-y-auto sm:block'
+            inProgress && 'max-h-96 w-96 overflow-y-auto'
           }`}
           tooltipConfig={{
             ...(inProgress && { interactive: true, delayHide: 100 }),
@@ -402,7 +413,7 @@ const StatusBadge = ({
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
           className={`${
-            inProgress && 'hidden max-h-96 w-96 overflow-y-auto sm:block'
+            inProgress && 'max-h-96 w-96 overflow-y-auto'
           }`}
           tooltipConfig={{
             ...(inProgress && { interactive: true, delayHide: 100 }),
@@ -489,7 +500,7 @@ const StatusBadge = ({
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
           className={`${
-            inProgress && 'hidden max-h-96 w-96 overflow-y-auto sm:block'
+            inProgress && 'max-h-96 w-96 overflow-y-auto'
           }`}
           tooltipConfig={{
             ...(inProgress && { interactive: true, delayHide: 100 }),

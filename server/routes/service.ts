@@ -5,6 +5,7 @@ import type {
   ServiceCommonServer,
   ServiceCommonServerWithDetails,
 } from '@server/interfaces/api/serviceInterfaces';
+import downloadTracker from '@server/lib/downloadtracker';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { Router } from 'express';
@@ -212,5 +213,46 @@ serviceRoutes.get<{ tmdbId: string }>(
     }
   }
 );
+
+/**
+ * POST /service/webhook
+ *
+ * Webhook endpoint for Sonarr and Radarr.  Configure a "Webhook" connection
+ * in Sonarr/Radarr pointing to:
+ *   {seerr-url}/api/v1/service/webhook
+ *
+ * with the header  X-API-Key: <your Seerr API key>.
+ *
+ * Supported events:
+ * - Grab       → triggers an immediate download-tracker refresh
+ * - Download   → triggers a download-tracker refresh
+ * - Import (Radarr eventType for imports)
+ *
+ * This gives Seerr near-instant status updates for state transitions
+ * (Requested → Downloading → Importing → Available) instead of waiting
+ * for the next polling cycle.
+ */
+serviceRoutes.post('/webhook', async (_req, res) => {
+  const body = _req.body as Record<string, unknown> | undefined;
+  const eventType = (body?.eventType as string) ?? 'unknown';
+
+  logger.info(`Received Sonarr/Radarr webhook: ${eventType}`, {
+    label: 'Webhook',
+  });
+
+  // Trigger an immediate download-tracker refresh so that the latest
+  // queue state is available on the next frontend poll.  The
+  // updateIfStale guard is bypassed with maxAge=0 to force a refresh.
+  try {
+    await downloadTracker.updateIfStale(0);
+  } catch (e) {
+    logger.warn('Webhook-triggered download sync failed', {
+      label: 'Webhook',
+      errorMessage: (e as Error).message,
+    });
+  }
+
+  return res.status(204).send();
+});
 
 export default serviceRoutes;
