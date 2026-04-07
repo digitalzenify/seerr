@@ -10,6 +10,7 @@ import {
   ClockIcon,
   FilmIcon,
   FireIcon,
+  GlobeAltIcon,
   SparklesIcon,
   StarIcon,
   TvIcon,
@@ -45,6 +46,12 @@ const messages = defineMessages('components.UserProfile.UserStatistics', {
   days: '{count, plural, one {# day} other {# days}}',
   episodes: '{count, plural, one {# episode} other {# episodes}}',
   noData: 'No viewing data available yet. Start watching to see your stats!',
+  genreEvolution: 'Genre Evolution Over Time',
+  libraryUtilization: 'Library Exploration',
+  libraryUtilizationDesc:
+    'Of {totalMovies} movies and {totalShows} TV shows on the server, you\'ve watched {watchedMovies} movies and {watchedShows} shows.',
+  libraryPlayful: 'There\'s a whole world out there.',
+  libraryExplored: 'You\'ve explored {percentage}% of the library.',
 });
 
 function formatWatchTime(minutes: number): string {
@@ -132,6 +139,222 @@ const HorizontalBarChart = ({
           </div>
         </div>
       ))}
+    </div>
+  );
+};
+
+// Color palette for genre lines in the evolution chart
+const GENRE_COLORS = [
+  { line: 'bg-indigo-500', text: 'text-indigo-400', dot: 'bg-indigo-400' },
+  { line: 'bg-emerald-500', text: 'text-emerald-400', dot: 'bg-emerald-400' },
+  { line: 'bg-amber-500', text: 'text-amber-400', dot: 'bg-amber-400' },
+  { line: 'bg-rose-500', text: 'text-rose-400', dot: 'bg-rose-400' },
+  { line: 'bg-purple-500', text: 'text-purple-400', dot: 'bg-purple-400' },
+  { line: 'bg-cyan-500', text: 'text-cyan-400', dot: 'bg-cyan-400' },
+];
+
+const GenreEvolutionChart = ({
+  genresByMonth,
+}: {
+  genresByMonth: UserStatisticsResponse['genresByMonth'];
+}) => {
+  if (!genresByMonth || genresByMonth.length === 0) return null;
+
+  // Determine top 5 genres across all months
+  const globalGenreCounts = new Map<string, number>();
+  for (const month of genresByMonth) {
+    for (const g of month.genres) {
+      globalGenreCounts.set(g.name, (globalGenreCounts.get(g.name) ?? 0) + g.count);
+    }
+  }
+  const topGenreNames = Array.from(globalGenreCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name]) => name);
+
+  // Take the last 12 months at most
+  const recentMonths = genresByMonth.slice(-12);
+
+  // Build data matrix: for each month, get count of each top genre
+  const monthLabels = recentMonths.map((m) => {
+    const [, monthNum] = m.month.split('-');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return monthNames[parseInt(monthNum, 10) - 1] ?? m.month;
+  });
+
+  const genreData = topGenreNames.map((genre) =>
+    recentMonths.map((m) => {
+      const g = m.genres.find((x) => x.name === genre);
+      return g?.count ?? 0;
+    })
+  );
+
+  // Find max value for scaling
+  const allValues = genreData.flat();
+  const maxVal = Math.max(...allValues, 1);
+
+  // Generate insight text
+  const firstMonth = recentMonths[0];
+  const lastMonth = recentMonths[recentMonths.length - 1];
+  const firstTopGenre = firstMonth?.genres[0]?.name;
+  const lastTopGenre = lastMonth?.genres[0]?.name;
+  const insightText =
+    firstTopGenre && lastTopGenre && firstTopGenre !== lastTopGenre
+      ? `In ${monthLabels[0]} you were all about ${firstTopGenre}, but by ${monthLabels[monthLabels.length - 1]} you pivoted to ${lastTopGenre}.`
+      : firstTopGenre
+        ? `${firstTopGenre} has been your consistent favorite.`
+        : '';
+
+  return (
+    <div className="rounded-xl bg-gray-800 p-4">
+      {/* Legend */}
+      <div className="mb-4 flex flex-wrap gap-3">
+        {topGenreNames.map((genre, i) => (
+          <div key={genre} className="flex items-center gap-1.5">
+            <div className={`h-2.5 w-2.5 rounded-full ${GENRE_COLORS[i % GENRE_COLORS.length].dot}`} />
+            <span className="text-xs text-gray-300">{genre}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Chart area */}
+      <div className="relative">
+        {/* Horizontal grid lines */}
+        <div className="absolute inset-0 flex flex-col justify-between">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="border-t border-gray-700/50" />
+          ))}
+        </div>
+
+        {/* Bars for each month */}
+        <div className="relative flex items-end gap-1" style={{ height: '160px' }}>
+          {recentMonths.map((_, monthIdx) => (
+            <div
+              key={monthIdx}
+              className="flex flex-1 flex-col items-center justify-end gap-0.5"
+              style={{ height: '100%' }}
+            >
+              {/* Stacked bars for top genres */}
+              <div className="flex w-full flex-col-reverse items-stretch gap-px" style={{ height: '100%', justifyContent: 'flex-start' }}>
+                {topGenreNames.map((_, genreIdx) => {
+                  const val = genreData[genreIdx][monthIdx];
+                  const heightPercent = (val / maxVal) * 100;
+                  return (
+                    <div
+                      key={genreIdx}
+                      className={`w-full rounded-sm ${GENRE_COLORS[genreIdx % GENRE_COLORS.length].line} transition-all duration-500`}
+                      style={{ height: `${heightPercent}%`, minHeight: val > 0 ? '2px' : '0' }}
+                      title={`${topGenreNames[genreIdx]}: ${val}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* X-axis labels */}
+        <div className="mt-2 flex gap-1">
+          {monthLabels.map((label, i) => (
+            <div key={i} className="flex-1 text-center text-xs text-gray-500">
+              {label}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Insight text */}
+      {insightText && (
+        <p className="mt-3 text-sm italic text-gray-400">
+          {insightText}
+        </p>
+      )}
+    </div>
+  );
+};
+
+const CircularProgress = ({
+  percentage,
+  size = 100,
+  strokeWidth = 8,
+}: {
+  percentage: number;
+  size?: number;
+  strokeWidth?: number;
+}) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <svg width={size} height={size} className="shrink-0 -rotate-90">
+      {/* Background circle */}
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        className="text-gray-700"
+      />
+      {/* Progress circle */}
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        className="text-indigo-500 transition-all duration-1000"
+      />
+    </svg>
+  );
+};
+
+const LibraryUtilizationCard = ({
+  utilization,
+  intl,
+}: {
+  utilization: NonNullable<UserStatisticsResponse['libraryUtilization']>;
+  intl: ReturnType<typeof useIntl>;
+}) => {
+  return (
+    <div className="rounded-xl bg-gray-800 p-4 sm:p-6">
+      <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
+        {/* Circular progress */}
+        <div className="relative">
+          <CircularProgress percentage={utilization.overallPercentage} size={120} strokeWidth={10} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-2xl font-bold text-white">
+              {utilization.overallPercentage}%
+            </span>
+          </div>
+        </div>
+
+        {/* Text content */}
+        <div className="flex-1 text-center sm:text-left">
+          <h3 className="text-lg font-bold text-white">
+            {intl.formatMessage(messages.libraryExplored, {
+              percentage: utilization.overallPercentage,
+            })}
+          </h3>
+          <p className="mt-1 text-sm text-gray-400">
+            {intl.formatMessage(messages.libraryUtilizationDesc, {
+              totalMovies: utilization.totalMovies,
+              totalShows: utilization.totalShows,
+              watchedMovies: utilization.watchedMovies,
+              watchedShows: utilization.watchedShows,
+            })}
+          </p>
+          <p className="mt-2 text-sm italic text-gray-500">
+            {intl.formatMessage(messages.libraryPlayful)}
+          </p>
+        </div>
+      </div>
     </div>
   );
 };
@@ -362,6 +585,33 @@ const UserStatistics = () => {
                   />
                 )}
               </div>
+            </section>
+          )}
+
+          {/* Genre Evolution Over Time */}
+          {(stats?.genresByMonth?.length ?? 0) > 1 && (
+            <section>
+              <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
+                <ChartBarIcon className="h-5 w-5 text-purple-400" />
+                {intl.formatMessage(messages.genreEvolution)}
+              </h2>
+              <GenreEvolutionChart
+                genresByMonth={stats?.genresByMonth ?? []}
+              />
+            </section>
+          )}
+
+          {/* Library Utilization */}
+          {stats?.libraryUtilization && (
+            <section>
+              <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
+                <GlobeAltIcon className="h-5 w-5 text-emerald-400" />
+                {intl.formatMessage(messages.libraryUtilization)}
+              </h2>
+              <LibraryUtilizationCard
+                utilization={stats.libraryUtilization}
+                intl={intl}
+              />
             </section>
           )}
         </div>
