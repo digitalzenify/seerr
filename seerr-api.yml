@@ -5370,7 +5370,7 @@ paths:
         Returns detailed viewing statistics for the user including watch counts,
         favorite genres, streaks, and time-based insights.
         Data is sourced from Jellyfin watch history and request history.
-        Results are cached per-user for 24 hours.
+        Results are cached per-user for 4 hours.
       tags:
         - users
       parameters:
@@ -5455,6 +5455,36 @@ paths:
                   mostActiveDay:
                     type: string
                     nullable: true
+                  genresByMonth:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        month:
+                          type: string
+                        genres:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              count:
+                                type: number
+                  libraryUtilization:
+                    type: object
+                    nullable: true
+                    properties:
+                      totalMovies:
+                        type: number
+                      totalShows:
+                        type: number
+                      watchedMovies:
+                        type: number
+                      watchedShows:
+                        type: number
+                      overallPercentage:
+                        type: number
   /search:
     get:
       summary: Search for movies, TV shows, or people
@@ -7537,6 +7567,110 @@ paths:
                     type: array
                     items:
                       type: object
+  /media/{mediaId}/subtitle-streams:
+    get:
+      summary: Get subtitle streams
+      description: Returns all available subtitle streams from Jellyfin for a media item, grouped by stream metadata.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Available subtitle streams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  streams:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: number
+                        language:
+                          type: string
+                        displayTitle:
+                          type: string
+                        codec:
+                          type: string
+                        isForced:
+                          type: boolean
+                        isDefault:
+                          type: boolean
+                        isExternal:
+                          type: boolean
+                        isHearingImpaired:
+                          type: boolean
+                        source:
+                          type: string
+  /media/{mediaId}/episode/{seasonNumber}/{episodeNumber}/subtitle-streams:
+    get:
+      summary: Get episode subtitle streams
+      description: Returns all available subtitle streams from Jellyfin for a specific TV episode.
+      tags:
+        - media
+      parameters:
+        - in: path
+          name: mediaId
+          description: Media ID
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: path
+          name: seasonNumber
+          description: Season number
+          required: true
+          example: '1'
+          schema:
+            type: string
+        - in: path
+          name: episodeNumber
+          description: Episode number
+          required: true
+          example: '1'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Available subtitle streams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  streams:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: number
+                        language:
+                          type: string
+                        displayTitle:
+                          type: string
+                        codec:
+                          type: string
+                        isForced:
+                          type: boolean
+                        isDefault:
+                          type: boolean
+                        isExternal:
+                          type: boolean
+                        isHearingImpaired:
+                          type: boolean
+                        source:
+                          type: string
   /media/{mediaId}/subtitle/{language}/download:
     get:
       summary: Download subtitle file

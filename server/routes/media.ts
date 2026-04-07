@@ -88,6 +88,26 @@ function getVideoBaseName(mediaSourcePath?: string): string {
   return ext ? basename.slice(0, -ext.length) : basename;
 }
 
+/**
+ * Derive the subtitle source/origin tag from file path or display title.
+ * Common sources: OpenSubtitles, Lingarr, Whisper, Bazarr, Embedded, etc.
+ */
+function deriveSubtitleSource(
+  filePath?: string,
+  displayTitle?: string
+): string {
+  const text = `${filePath ?? ''} ${displayTitle ?? ''}`.toLowerCase();
+  if (text.includes('opensubtitles')) return 'OpenSubtitles';
+  if (text.includes('lingarr')) return 'Lingarr';
+  if (text.includes('whisper')) return 'Whisper';
+  if (text.includes('bazarr')) return 'Bazarr';
+  if (text.includes('subscene')) return 'Subscene';
+  if (text.includes('addic7ed')) return 'Addic7ed';
+  // External files (srt, ass, etc.) that are sidecar files
+  if (filePath) return 'External';
+  return 'Embedded';
+}
+
 mediaRoutes.get('/', async (req, res, next) => {
   const mediaRepository = getRepository(Media);
 
@@ -601,6 +621,177 @@ mediaRoutes.get<{ id: string }>(
         message: e.message,
       });
       next({ status: 500, message: 'Failed to fetch subtitles.' });
+    }
+  }
+);
+
+/**
+ * GET /media/:id/subtitle-streams
+ * Returns all available subtitle streams from Jellyfin for a media item,
+ * grouped by language. Used by the unified subtitle download modal.
+ */
+mediaRoutes.get<{ id: string }>(
+  '/:id/subtitle-streams',
+  isAuthenticated(),
+  async (req, res, next) => {
+    try {
+      const jf = getJellyfinConnection();
+      if (!jf) {
+        return res.status(200).json({ streams: [] });
+      }
+
+      const media = await getRepository(Media).findOne({
+        where: { id: Number(req.params.id) },
+      });
+      if (!media) {
+        return next({ status: 404, message: 'Media not found.' });
+      }
+
+      const jellyfinId = media.jellyfinMediaId;
+      if (!jellyfinId) {
+        return res.status(200).json({ streams: [] });
+      }
+
+      const itemUrl = `${jf.baseUrl}/Items?ids=${encodeURIComponent(
+        jellyfinId
+      )}&fields=MediaSources&api_key=${encodeURIComponent(jf.apiKey)}`;
+      const itemResponse = await axios.get(itemUrl);
+      const item = itemResponse.data.Items?.[0];
+
+      if (!item?.MediaSources?.length) {
+        return res.status(200).json({ streams: [] });
+      }
+
+      const mediaSource = item.MediaSources[0];
+      const subtitleStreams = (mediaSource.MediaStreams ?? [])
+        .filter(
+          (stream: { Type: string }) => stream.Type === 'Subtitle'
+        )
+        .map(
+          (stream: {
+            Index: number;
+            Language?: string;
+            DisplayTitle?: string;
+            Title?: string;
+            Codec?: string;
+            IsForced?: boolean;
+            IsDefault?: boolean;
+            IsExternal?: boolean;
+            IsHearingImpaired?: boolean;
+            SupportsExternalStream?: boolean;
+            Path?: string;
+          }) => ({
+            index: stream.Index,
+            language: stream.Language ?? 'und',
+            displayTitle: stream.DisplayTitle ?? stream.Title ?? '',
+            codec: stream.Codec ?? '',
+            isForced: stream.IsForced ?? false,
+            isDefault: stream.IsDefault ?? false,
+            isExternal: stream.IsExternal ?? false,
+            isHearingImpaired: stream.IsHearingImpaired ?? false,
+            // Derive source tag from path or other metadata
+            source: deriveSubtitleSource(stream.Path, stream.DisplayTitle),
+          })
+        );
+
+      return res.status(200).json({ streams: subtitleStreams });
+    } catch (e) {
+      logger.error('Failed to fetch subtitle streams', {
+        label: 'Media',
+        message: e.message,
+      });
+      next({ status: 500, message: 'Failed to fetch subtitle streams.' });
+    }
+  }
+);
+
+/**
+ * GET /media/:id/episode/:seasonNumber/:episodeNumber/subtitle-streams
+ * Returns all available subtitle streams from Jellyfin for a TV episode.
+ */
+mediaRoutes.get<{
+  id: string;
+  seasonNumber: string;
+  episodeNumber: string;
+}>(
+  '/:id/episode/:seasonNumber/:episodeNumber/subtitle-streams',
+  isAuthenticated(),
+  async (req, res, next) => {
+    try {
+      const jf = getJellyfinConnection();
+      if (!jf) {
+        return res.status(200).json({ streams: [] });
+      }
+
+      const media = await getRepository(Media).findOne({
+        where: { id: Number(req.params.id) },
+      });
+      if (!media) {
+        return next({ status: 404, message: 'Media not found.' });
+      }
+
+      const jellyfinId = media.jellyfinMediaId;
+      if (!jellyfinId) {
+        return res.status(200).json({ streams: [] });
+      }
+
+      const seasonNumber = Number(req.params.seasonNumber);
+      const episodeNumber = Number(req.params.episodeNumber);
+
+      const episodesUrl = `${jf.baseUrl}/Shows/${encodeURIComponent(
+        jellyfinId
+      )}/Episodes?season=${seasonNumber}&fields=MediaSources&api_key=${encodeURIComponent(
+        jf.apiKey
+      )}`;
+      const episodesResponse = await axios.get(episodesUrl);
+      const episode = episodesResponse.data.Items?.find(
+        (ep: { IndexNumber?: number; ParentIndexNumber?: number }) =>
+          ep.IndexNumber === episodeNumber &&
+          ep.ParentIndexNumber === seasonNumber
+      );
+
+      if (!episode?.MediaSources?.length) {
+        return res.status(200).json({ streams: [] });
+      }
+
+      const mediaSource = episode.MediaSources[0];
+      const subtitleStreams = (mediaSource.MediaStreams ?? [])
+        .filter(
+          (stream: { Type: string }) => stream.Type === 'Subtitle'
+        )
+        .map(
+          (stream: {
+            Index: number;
+            Language?: string;
+            DisplayTitle?: string;
+            Title?: string;
+            Codec?: string;
+            IsForced?: boolean;
+            IsDefault?: boolean;
+            IsExternal?: boolean;
+            IsHearingImpaired?: boolean;
+            SupportsExternalStream?: boolean;
+            Path?: string;
+          }) => ({
+            index: stream.Index,
+            language: stream.Language ?? 'und',
+            displayTitle: stream.DisplayTitle ?? stream.Title ?? '',
+            codec: stream.Codec ?? '',
+            isForced: stream.IsForced ?? false,
+            isDefault: stream.IsDefault ?? false,
+            isExternal: stream.IsExternal ?? false,
+            isHearingImpaired: stream.IsHearingImpaired ?? false,
+            source: deriveSubtitleSource(stream.Path, stream.DisplayTitle),
+          })
+        );
+
+      return res.status(200).json({ streams: subtitleStreams });
+    } catch (e) {
+      logger.error('Failed to fetch episode subtitle streams', {
+        label: 'Media',
+        message: e.message,
+      });
+      next({ status: 500, message: 'Failed to fetch subtitle streams.' });
     }
   }
 );

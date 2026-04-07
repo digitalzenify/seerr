@@ -53,4 +53,19 @@ export interface UserStatisticsResponse {
   // Time-Based Insights
   preferredWatchingHour: number | null;
   mostActiveDay: string | null;
+
+  // Genre Evolution Over Time
+  genresByMonth: Array<{
+    month: string; // e.g. "2024-01"
+    genres: Array<{ name: string; count: number }>;
+  }>;
+
+  // Library Utilization
+  libraryUtilization: {
+    totalMovies: number;
+    totalShows: number;
+    watchedMovies: number;
+    watchedShows: number;
+    overallPercentage: number;
+  } | null;
 }

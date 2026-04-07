@@ -95,8 +95,10 @@ class CacheManager {
         checkPeriod: 60 * 30,
       }
     ),
+    // FIX: Reduced TTL from 24h to 4h so stats refresh more frequently,
+    // preventing stale "Most Recent Watch" and other time-sensitive stats.
     'user-stats': new Cache('user-stats', 'User Statistics', {
-      stdTtl: 86400, // 24 hour cache
+      stdTtl: 14400, // 4 hour cache
       checkPeriod: 60 * 30,
     }),
   };
