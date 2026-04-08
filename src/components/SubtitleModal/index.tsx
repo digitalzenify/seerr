@@ -27,6 +27,7 @@ const messages = defineMessages('components.SubtitleModal', {
   defaultTrack: 'Default',
   english: 'English',
   romanian: 'Romanian',
+  matchScore: 'Score: {score}',
 });
 
 interface SubtitleStream {
@@ -39,6 +40,7 @@ interface SubtitleStream {
   isExternal: boolean;
   isHearingImpaired: boolean;
   source: string;
+  matchScore?: number;
 }
 
 interface SubtitleModalProps {
@@ -265,6 +267,13 @@ const SubtitleModal = ({
                           {stream.isDefault && (
                             <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-medium text-emerald-300">
                               {intl.formatMessage(messages.defaultTrack)}
+                            </span>
+                          )}
+                          {stream.matchScore != null && (
+                            <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-xs font-medium text-cyan-300">
+                              {intl.formatMessage(messages.matchScore, {
+                                score: stream.matchScore,
+                              })}
                             </span>
                           )}
                         </div>

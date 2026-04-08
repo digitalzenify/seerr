@@ -7616,6 +7616,10 @@ paths:
                           type: boolean
                         source:
                           type: string
+                        matchScore:
+                          type: number
+                          nullable: true
+                          description: Bazarr match score for this subtitle (when available)
   /media/{mediaId}/episode/{seasonNumber}/{episodeNumber}/subtitle-streams:
     get:
       summary: Get episode subtitle streams
@@ -7675,6 +7679,10 @@ paths:
                           type: boolean
                         source:
                           type: string
+                        matchScore:
+                          type: number
+                          nullable: true
+                          description: Bazarr match score for this subtitle (when available)
   /media/{mediaId}/subtitle/{language}/download:
     get:
       summary: Download subtitle file

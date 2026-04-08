@@ -8,6 +8,7 @@ export interface BazarrSubtitle {
   code3: string;
   forced: boolean;
   hi: boolean;
+  score?: number;
 }
 
 export interface BazarrMovieResponse {
