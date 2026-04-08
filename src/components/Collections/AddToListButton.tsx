@@ -80,7 +80,7 @@ const AddToListButton = ({
     };
 
     checkLists();
-  }, [user?.id, lists.length, tmdbId, mediaType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, lists, tmdbId, mediaType]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

@@ -1223,7 +1223,10 @@ router.get<{ id: string }, UserStatisticsResponse>(
             // that have DateCreated well before the user started watching.
             if (item.DatePlayed && item.Genres) {
               const actualPlayDate = new Date(item.DatePlayed);
-              // Use ISO week key (YYYY-Www) for weekly bins
+              // Use approximate week key (YYYY-Www) for weekly bins.
+              // Note: This is a simplified week calculation that may not
+              // align exactly with ISO 8601 week numbering for edge cases
+              // at year boundaries. This is acceptable for chart display.
               const yearNum = actualPlayDate.getFullYear();
               const jan1 = new Date(yearNum, 0, 1);
               const dayOfYear =

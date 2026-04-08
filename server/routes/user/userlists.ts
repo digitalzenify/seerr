@@ -299,9 +299,9 @@ router.post(
         });
       }
 
-      // Find or create Media entry
+      // Look up existing Media entry (may be null if not yet in database)
       const mediaRepo = getRepository(Media);
-      let media = await mediaRepo.findOne({
+      const media = await mediaRepo.findOne({
         where: { tmdbId: Number(tmdbId), mediaType },
       });
 

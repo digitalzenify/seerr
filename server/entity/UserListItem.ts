@@ -38,7 +38,7 @@ export class UserListItem {
 
   @ManyToOne(() => Media, {
     eager: true,
-    onDelete: 'CASCADE',
+    onDelete: 'SET NULL',
     nullable: true,
   })
   @Index()
