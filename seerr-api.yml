@@ -5479,9 +5479,13 @@ paths:
                         type: number
                       totalShows:
                         type: number
+                      totalEpisodes:
+                        type: number
                       watchedMovies:
                         type: number
                       watchedShows:
+                        type: number
+                      watchedEpisodes:
                         type: number
                       overallPercentage:
                         type: number
