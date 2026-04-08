@@ -2,6 +2,7 @@ import Header from '@app/components/Common/Header';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import ProfileHeader from '@app/components/UserProfile/ProfileHeader';
+import { getItemDisplayTitle } from '@app/components/Collections/utils';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import {
@@ -263,7 +264,7 @@ const CollectionsHub = () => {
                     href={`/${pickedItem.mediaType === 'movie' ? 'movie' : 'tv'}/${pickedItem.tmdbId}`}
                     className="mt-2 inline-block text-xl font-bold text-indigo-400 transition hover:text-indigo-300"
                   >
-                    {pickedItem.title || `${pickedItem.mediaType === 'movie' ? 'Movie' : 'TV Show'} #${pickedItem.tmdbId}`}
+                    {getItemDisplayTitle(pickedItem)}
                   </Link>
                   <div className="mt-1">
                     <span className="inline-block rounded bg-gray-700 px-2 py-0.5 text-xs text-gray-300">

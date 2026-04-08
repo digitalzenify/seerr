@@ -1,6 +1,7 @@
 import Header from '@app/components/Common/Header';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import { getItemDisplayTitle } from '@app/components/Collections/utils';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import {
@@ -219,7 +220,7 @@ const ListDetailPage = () => {
                   href={`/${pickedItem.mediaType === 'movie' ? 'movie' : 'tv'}/${pickedItem.tmdbId}`}
                   className="mt-1 inline-block text-xl font-bold text-indigo-400 transition hover:text-indigo-300"
                 >
-                  {pickedItem.title || `#${pickedItem.tmdbId}`}
+                  {getItemDisplayTitle(pickedItem)}
                 </Link>
                 <button
                   onClick={handlePickFromList}
@@ -315,7 +316,7 @@ const ListDetailPage = () => {
                   </div>
                   <div className="p-2">
                     <p className="truncate text-sm font-medium text-white">
-                      {item.title || `${item.mediaType === 'movie' ? 'Movie' : 'TV'} #${item.tmdbId}`}
+                      {getItemDisplayTitle(item)}
                     </p>
                     <p className="mt-0.5 text-xs text-gray-500">
                       {item.mediaType === 'movie' ? '🎬 Movie' : '📺 TV Show'}
@@ -355,7 +356,7 @@ const ListDetailPage = () => {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-white">
-                      {item.title || `#${item.tmdbId}`}
+                      {getItemDisplayTitle(item)}
                     </p>
                     <p className="text-xs text-gray-500">
                       {item.mediaType === 'movie' ? 'Movie' : 'TV Show'} · Added{' '}

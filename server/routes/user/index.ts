@@ -1009,6 +1009,23 @@ router.get<{ id: string }, UserStatisticsResponse>(
         where: { id: Number(req.params.id) },
       });
 
+      /**
+       * Compute an approximate week key (YYYY-Www) for chart bucketing.
+       * Uses a simplified formula: week = ceil((dayOfYear + jan1DayOfWeek) / 7).
+       * This may differ from ISO 8601 week numbering at year boundaries
+       * (e.g., Dec 31 might map to week 53 instead of week 1 of next year),
+       * but is sufficient for chart display purposes where the goal is
+       * consistent weekly grouping rather than standards compliance.
+       */
+      const getApproxWeekKey = (date: Date): string => {
+        const year = date.getFullYear();
+        const jan1 = new Date(year, 0, 1);
+        const dayOfYear =
+          Math.floor((date.getTime() - jan1.getTime()) / 86400000) + 1;
+        const weekNum = Math.ceil((dayOfYear + jan1.getDay()) / 7);
+        return `${year}-W${String(weekNum).padStart(2, '0')}`;
+      };
+
       // Initialize stats
       const stats: UserStatisticsResponse = {
         totalMoviesWatched: 0,
@@ -1223,20 +1240,7 @@ router.get<{ id: string }, UserStatisticsResponse>(
             // that have DateCreated well before the user started watching.
             if (item.DatePlayed && item.Genres) {
               const actualPlayDate = new Date(item.DatePlayed);
-              // Use approximate week key (YYYY-Www) for weekly bins.
-              // Note: This is a simplified week calculation that may not
-              // align exactly with ISO 8601 week numbering for edge cases
-              // at year boundaries. This is acceptable for chart display.
-              const yearNum = actualPlayDate.getFullYear();
-              const jan1 = new Date(yearNum, 0, 1);
-              const dayOfYear =
-                Math.floor(
-                  (actualPlayDate.getTime() - jan1.getTime()) / 86400000
-                ) + 1;
-              const weekNum = Math.ceil(
-                (dayOfYear + jan1.getDay()) / 7
-              );
-              const weekKey = `${yearNum}-W${String(weekNum).padStart(2, '0')}`;
+              const weekKey = getApproxWeekKey(actualPlayDate);
 
               if (!monthGenreCounts.has(weekKey)) {
                 monthGenreCounts.set(weekKey, new Map());
