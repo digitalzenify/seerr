@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { UserStatisticsResponse } from '@server/interfaces/api/userInterfaces';
 import { useRouter } from 'next/router';
+import { useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -49,7 +50,7 @@ const messages = defineMessages('components.UserProfile.UserStatistics', {
   genreEvolution: 'Genre Evolution Over Time',
   libraryUtilization: 'Library Exploration',
   libraryUtilizationDesc:
-    'Of {totalMovies} movies and {totalShows} TV shows on the server, you\'ve watched {watchedMovies} movies and {watchedShows} shows.',
+    'Of {totalMovies} movies and {totalShows} TV shows ({totalEpisodes} episodes) on the server, you\'ve watched {watchedMovies} movies and {watchedShows} shows ({watchedEpisodes} episodes).',
   libraryPlayful: 'There\'s a whole world out there.',
   libraryExplored: 'You\'ve explored {percentage}% of the library.',
 });
@@ -158,13 +159,24 @@ const GenreEvolutionChart = ({
 }: {
   genresByMonth: UserStatisticsResponse['genresByMonth'];
 }) => {
+  const [tooltip, setTooltip] = useState<{
+    x: number;
+    y: number;
+    week: string;
+    genres: Array<{ name: string; count: number; colorIdx: number }>;
+  } | null>(null);
+  const [showPercentage, setShowPercentage] = useState(false);
+
   if (!genresByMonth || genresByMonth.length === 0) return null;
 
-  // Determine top 5 genres across all months
+  // Determine top 5 genres across all time periods; group the rest as "Other"
   const globalGenreCounts = new Map<string, number>();
-  for (const month of genresByMonth) {
-    for (const g of month.genres) {
-      globalGenreCounts.set(g.name, (globalGenreCounts.get(g.name) ?? 0) + g.count);
+  for (const period of genresByMonth) {
+    for (const g of period.genres) {
+      globalGenreCounts.set(
+        g.name,
+        (globalGenreCounts.get(g.name) ?? 0) + g.count
+      );
     }
   }
   const topGenreNames = Array.from(globalGenreCounts.entries())
@@ -172,102 +184,345 @@ const GenreEvolutionChart = ({
     .slice(0, 5)
     .map(([name]) => name);
 
-  // Take the last 12 months at most
-  const recentMonths = genresByMonth.slice(-12);
+  const allGenreNames = [...topGenreNames, 'Other'];
 
-  // Build data matrix: for each month, get count of each top genre
-  const monthLabels = recentMonths.map((m) => {
-    const [, monthNum] = m.month.split('-');
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return monthNames[parseInt(monthNum, 10) - 1] ?? m.month;
-  });
+  // Take the last 24 periods (weeks) at most
+  const recentPeriods = genresByMonth.slice(-24);
 
-  const genreData = topGenreNames.map((genre) =>
-    recentMonths.map((m) => {
+  // Parse period keys to actual dates for true time scaling
+  const parsePeriodToDate = (key: string): Date => {
+    // Support both "YYYY-Www" (weekly) and "YYYY-MM" (monthly) formats
+    const weekMatch = key.match(/^(\d{4})-W(\d{2})$/);
+    if (weekMatch) {
+      const year = parseInt(weekMatch[1], 10);
+      const week = parseInt(weekMatch[2], 10);
+      // Calculate date from ISO week number (approximate: Jan 1 + (week-1)*7 days)
+      const jan1 = new Date(year, 0, 1);
+      const dayOffset = (week - 1) * 7 - jan1.getDay() + 1;
+      return new Date(year, 0, 1 + dayOffset);
+    }
+    // Monthly format: "YYYY-MM"
+    const [yearStr, monthStr] = key.split('-');
+    return new Date(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1, 1);
+  };
+
+  const periodDates = recentPeriods.map((p) => parsePeriodToDate(p.month));
+  const minDate = periodDates.length > 0 ? periodDates[0].getTime() : 0;
+  const maxDate =
+    periodDates.length > 0
+      ? periodDates[periodDates.length - 1].getTime()
+      : 0;
+  const dateRange = maxDate - minDate || 1;
+
+  // Build data matrix: for each genre (top 5 + Other), get count per period
+  const genreData = allGenreNames.map((genre) =>
+    recentPeriods.map((m) => {
+      if (genre === 'Other') {
+        return m.genres
+          .filter((x) => !topGenreNames.includes(x.name))
+          .reduce((sum, x) => sum + x.count, 0);
+      }
       const g = m.genres.find((x) => x.name === genre);
       return g?.count ?? 0;
     })
   );
 
-  // Find max value for scaling
-  const allValues = genreData.flat();
-  const maxVal = Math.max(...allValues, 1);
+  // Compute stacked values and totals per period
+  const periodTotals = recentPeriods.map((_, pIdx) =>
+    genreData.reduce((sum, gd) => sum + gd[pIdx], 0)
+  );
+
+  // For absolute view: max of stacked totals
+  const maxStackedVal = Math.max(...periodTotals, 1);
+
+  // SVG dimensions
+  const svgWidth = 600;
+  const svgHeight = 200;
+  const padding = { top: 10, right: 15, bottom: 30, left: 40 };
+  const chartWidth = svgWidth - padding.left - padding.right;
+  const chartHeight = svgHeight - padding.top - padding.bottom;
+
+  // X position from date
+  const xFromDate = (date: Date) =>
+    padding.left + ((date.getTime() - minDate) / dateRange) * chartWidth;
+
+  // Y position from value (0 at bottom, max at top)
+  const yFromVal = (val: number) =>
+    padding.top + chartHeight - (val / maxStackedVal) * chartHeight;
+  const yFromPct = (pct: number) =>
+    padding.top + chartHeight - (pct / 100) * chartHeight;
+
+  // Build stacked area paths
+  const stackedPaths: string[] = [];
+  const cumulativeBottom: number[] = genreData[0].map(() => 0);
+
+  for (let gIdx = 0; gIdx < allGenreNames.length; gIdx++) {
+    const topLine: Array<{ x: number; y: number }> = [];
+    const bottomLine: Array<{ x: number; y: number }> = [];
+
+    for (let pIdx = 0; pIdx < recentPeriods.length; pIdx++) {
+      const x = xFromDate(periodDates[pIdx]);
+      const rawVal = genreData[gIdx][pIdx];
+      const cumBottom = cumulativeBottom[pIdx];
+
+      if (showPercentage) {
+        const total = periodTotals[pIdx] || 1;
+        const pctBottom = (cumBottom / total) * 100;
+        const pctTop = ((cumBottom + rawVal) / total) * 100;
+        topLine.push({ x, y: yFromPct(pctTop) });
+        bottomLine.push({ x, y: yFromPct(pctBottom) });
+      } else {
+        topLine.push({ x, y: yFromVal(cumBottom + rawVal) });
+        bottomLine.push({ x, y: yFromVal(cumBottom) });
+      }
+
+      cumulativeBottom[pIdx] = cumBottom + rawVal;
+    }
+
+    // Build SVG path: top line forward, then bottom line reversed
+    const topPath = topLine
+      .map((p, i) => (i === 0 ? `M${p.x},${p.y}` : `L${p.x},${p.y}`))
+      .join(' ');
+    const bottomPath = [...bottomLine]
+      .reverse()
+      .map((p) => `L${p.x},${p.y}`)
+      .join(' ');
+    stackedPaths.push(`${topPath} ${bottomPath} Z`);
+  }
+
+  // Y-axis tick values
+  const yTicks = showPercentage
+    ? [0, 25, 50, 75, 100]
+    : Array.from({ length: 5 }, (_, i) =>
+        Math.round((maxStackedVal / 4) * i)
+      );
+
+  // X-axis labels: show ~6 evenly spaced labels
+  const labelCount = Math.min(6, recentPeriods.length);
+  const labelIndices = Array.from({ length: labelCount }, (_, i) =>
+    Math.round((i / (labelCount - 1 || 1)) * (recentPeriods.length - 1))
+  );
+  const formatDate = (d: Date) => {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return `${months[d.getMonth()]} ${d.getDate()}`;
+  };
 
   // Generate insight text
-  const firstMonth = recentMonths[0];
-  const lastMonth = recentMonths[recentMonths.length - 1];
-  const firstTopGenre = firstMonth?.genres[0]?.name;
-  const lastTopGenre = lastMonth?.genres[0]?.name;
+  const firstPeriod = recentPeriods[0];
+  const lastPeriod = recentPeriods[recentPeriods.length - 1];
+  const firstTopGenre = firstPeriod?.genres[0]?.name;
+  const lastTopGenre = lastPeriod?.genres[0]?.name;
+  const firstLabel = periodDates[0] ? formatDate(periodDates[0]) : '';
+  const lastLabel =
+    periodDates.length > 0
+      ? formatDate(periodDates[periodDates.length - 1])
+      : '';
   const insightText =
     firstTopGenre && lastTopGenre && firstTopGenre !== lastTopGenre
-      ? `In ${monthLabels[0]} you were all about ${firstTopGenre}, but by ${monthLabels[monthLabels.length - 1]} you pivoted to ${lastTopGenre}.`
+      ? `Around ${firstLabel} you were all about ${firstTopGenre}, but by ${lastLabel} you pivoted to ${lastTopGenre}.`
       : firstTopGenre
         ? `${firstTopGenre} has been your consistent favorite.`
         : '';
 
+  // Stacked area fill colors (solid Tailwind classes mapped to hex for SVG)
+  const GENRE_HEX = [
+    '#6366f1', // indigo-500
+    '#10b981', // emerald-500
+    '#f59e0b', // amber-500
+    '#f43f5e', // rose-500
+    '#a855f7', // purple-500
+    '#64748b', // slate-500 (for "Other")
+  ];
+
   return (
     <div className="rounded-xl bg-gray-800 p-4">
-      {/* Legend */}
-      <div className="mb-4 flex flex-wrap gap-3">
-        {topGenreNames.map((genre, i) => (
+      {/* Legend + toggle */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        {allGenreNames.map((genre, i) => (
           <div key={genre} className="flex items-center gap-1.5">
-            <div className={`h-2.5 w-2.5 rounded-full ${GENRE_COLORS[i % GENRE_COLORS.length].dot}`} />
+            <div
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: GENRE_HEX[i % GENRE_HEX.length] }}
+            />
             <span className="text-xs text-gray-300">{genre}</span>
           </div>
         ))}
+        <button
+          onClick={() => setShowPercentage(!showPercentage)}
+          className="ml-auto rounded-md bg-gray-700 px-2 py-1 text-xs text-gray-300 transition hover:bg-gray-600"
+        >
+          {showPercentage ? '#' : '%'}
+        </button>
       </div>
 
       {/* Chart area */}
-      <div className="relative">
-        {/* Horizontal grid lines */}
-        <div className="absolute inset-0 flex flex-col justify-between">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="border-t border-gray-700/50" />
-          ))}
-        </div>
+      <div
+        className="relative"
+        onMouseLeave={() => setTooltip(null)}
+      >
+        <svg
+          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+          className="w-full"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {/* Horizontal grid lines */}
+          {yTicks.map((tick) => {
+            const y = showPercentage ? yFromPct(tick) : yFromVal(tick);
+            return (
+              <line
+                key={tick}
+                x1={padding.left}
+                x2={svgWidth - padding.right}
+                y1={y}
+                y2={y}
+                stroke="#374151"
+                strokeWidth="0.5"
+                strokeDasharray="4 2"
+              />
+            );
+          })}
 
-        {/* Bars for each month */}
-        <div className="relative flex items-end gap-1" style={{ height: '160px' }}>
-          {recentMonths.map((_, monthIdx) => (
-            <div
-              key={monthIdx}
-              className="flex flex-1 flex-col items-center justify-end gap-0.5"
-              style={{ height: '100%' }}
-            >
-              {/* Stacked bars for top genres */}
-              <div className="flex w-full flex-col-reverse items-stretch gap-px" style={{ height: '100%', justifyContent: 'flex-start' }}>
-                {topGenreNames.map((_, genreIdx) => {
-                  const val = genreData[genreIdx][monthIdx];
-                  const heightPercent = (val / maxVal) * 100;
-                  return (
-                    <div
-                      key={genreIdx}
-                      className={`w-full rounded-sm ${GENRE_COLORS[genreIdx % GENRE_COLORS.length].line} transition-all duration-500`}
-                      style={{ height: `${heightPercent}%`, minHeight: val > 0 ? '2px' : '0' }}
-                      title={`${topGenreNames[genreIdx]}: ${val}`}
-                    />
-                  );
-                })}
+          {/* Y-axis labels */}
+          {yTicks.map((tick) => {
+            const y = showPercentage ? yFromPct(tick) : yFromVal(tick);
+            return (
+              <text
+                key={`label-${tick}`}
+                x={padding.left - 6}
+                y={y + 3}
+                textAnchor="end"
+                className="fill-gray-500"
+                fontSize="10"
+              >
+                {showPercentage ? `${tick}%` : tick}
+              </text>
+            );
+          })}
+
+          {/* Y-axis title */}
+          <text
+            x={12}
+            y={padding.top + chartHeight / 2}
+            textAnchor="middle"
+            className="fill-gray-500"
+            fontSize="10"
+            transform={`rotate(-90, 12, ${padding.top + chartHeight / 2})`}
+          >
+            {showPercentage ? '% of titles' : '# of titles watched'}
+          </text>
+
+          {/* Stacked area paths */}
+          {stackedPaths.map((d, i) => (
+            <path
+              key={i}
+              d={d}
+              fill={GENRE_HEX[i % GENRE_HEX.length]}
+              fillOpacity={0.7}
+              stroke={GENRE_HEX[i % GENRE_HEX.length]}
+              strokeWidth="1"
+            />
+          ))}
+
+          {/* Invisible hover zones for tooltips */}
+          {recentPeriods.map((period, pIdx) => {
+            const x = xFromDate(periodDates[pIdx]);
+            const halfGap =
+              recentPeriods.length > 1 ? chartWidth / (recentPeriods.length - 1) / 2 : chartWidth / 2;
+            return (
+              <rect
+                key={pIdx}
+                x={x - halfGap}
+                y={padding.top}
+                width={halfGap * 2}
+                height={chartHeight}
+                fill="transparent"
+                onMouseEnter={(e) => {
+                  const svg = e.currentTarget.ownerSVGElement;
+                  if (!svg) return;
+                  const rect = svg.getBoundingClientRect();
+                  const tooltipX =
+                    ((x / svgWidth) * rect.width) + rect.left;
+                  const tooltipY = rect.top + padding.top;
+                  setTooltip({
+                    x: tooltipX,
+                    y: tooltipY,
+                    week: formatDate(periodDates[pIdx]),
+                    genres: allGenreNames.map((name, gIdx) => ({
+                      name,
+                      count: genreData[gIdx][pIdx],
+                      colorIdx: gIdx,
+                    })).filter((g) => g.count > 0),
+                  });
+                }}
+                onMouseLeave={() => setTooltip(null)}
+              />
+            );
+          })}
+
+          {/* X-axis labels */}
+          {labelIndices.map((idx) => {
+            const x = xFromDate(periodDates[idx]);
+            return (
+              <text
+                key={idx}
+                x={x}
+                y={svgHeight - 5}
+                textAnchor="middle"
+                className="fill-gray-500"
+                fontSize="10"
+              >
+                {formatDate(periodDates[idx])}
+              </text>
+            );
+          })}
+        </svg>
+
+        {/* Tooltip */}
+        {tooltip && (
+          <div
+            className="pointer-events-none fixed z-50 rounded-lg bg-gray-900 px-3 py-2 shadow-lg ring-1 ring-gray-700"
+            style={{
+              left: tooltip.x,
+              top: tooltip.y,
+              transform: 'translate(-50%, -100%)',
+            }}
+          >
+            <div className="mb-1 text-xs font-medium text-gray-300">
+              {tooltip.week}
+            </div>
+            {tooltip.genres.map((g) => (
+              <div key={g.name} className="flex items-center gap-1.5 text-xs">
+                <div
+                  className="h-2 w-2 rounded-full"
+                  style={{
+                    backgroundColor:
+                      GENRE_HEX[g.colorIdx % GENRE_HEX.length],
+                  }}
+                />
+                <span className="text-gray-400">{g.name}:</span>
+                <span className="font-medium text-white">{g.count}</span>
               </div>
-            </div>
-          ))}
-        </div>
-
-        {/* X-axis labels */}
-        <div className="mt-2 flex gap-1">
-          {monthLabels.map((label, i) => (
-            <div key={i} className="flex-1 text-center text-xs text-gray-500">
-              {label}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Insight text */}
       {insightText && (
-        <p className="mt-3 text-sm italic text-gray-400">
-          {insightText}
-        </p>
+        <p className="mt-3 text-sm italic text-gray-400">{insightText}</p>
       )}
     </div>
   );
@@ -346,8 +601,10 @@ const LibraryUtilizationCard = ({
             {intl.formatMessage(messages.libraryUtilizationDesc, {
               totalMovies: utilization.totalMovies,
               totalShows: utilization.totalShows,
+              totalEpisodes: utilization.totalEpisodes,
               watchedMovies: utilization.watchedMovies,
               watchedShows: utilization.watchedShows,
+              watchedEpisodes: utilization.watchedEpisodes,
             })}
           </p>
           <p className="mt-2 text-sm italic text-gray-500">

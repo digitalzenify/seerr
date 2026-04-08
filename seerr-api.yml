@@ -5479,12 +5479,377 @@ paths:
                         type: number
                       totalShows:
                         type: number
+                      totalEpisodes:
+                        type: number
                       watchedMovies:
                         type: number
                       watchedShows:
                         type: number
+                      watchedEpisodes:
+                        type: number
                       overallPercentage:
                         type: number
+  /user/{userId}/lists:
+    get:
+      summary: Get user custom lists
+      description: Returns all custom lists for the user.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: User lists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        name:
+                          type: string
+                        description:
+                          type: string
+                        sortOrder:
+                          type: number
+                        isDefault:
+                          type: boolean
+                        itemCount:
+                          type: number
+                        createdAt:
+                          type: string
+                        updatedAt:
+                          type: string
+    post:
+      summary: Create a custom list
+      description: Creates a new custom list for the user.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Created list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: number
+                  name:
+                    type: string
+                  description:
+                    type: string
+                  sortOrder:
+                    type: number
+                  isDefault:
+                    type: boolean
+                  itemCount:
+                    type: number
+                  createdAt:
+                    type: string
+                  updatedAt:
+                    type: string
+  /user/{userId}/lists/{listId}:
+    get:
+      summary: Get a specific list with items
+      description: Returns a specific list with all its items.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: List with items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: number
+                  name:
+                    type: string
+                  description:
+                    type: string
+                  sortOrder:
+                    type: number
+                  isDefault:
+                    type: boolean
+                  createdAt:
+                    type: string
+                  updatedAt:
+                    type: string
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        tmdbId:
+                          type: number
+                        mediaType:
+                          type: string
+                        title:
+                          type: string
+                        sortOrder:
+                          type: number
+                        createdAt:
+                          type: string
+    put:
+      summary: Update a list
+      description: Update list name, description, or sort order.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                sortOrder:
+                  type: number
+      responses:
+        '200':
+          description: Updated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: number
+                  name:
+                    type: string
+    delete:
+      summary: Delete a list
+      description: Deletes a custom list and all its items.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: number
+      responses:
+        '204':
+          description: List deleted
+  /user/{userId}/lists/{listId}/items:
+    post:
+      summary: Add item to list
+      description: Adds a movie or TV show to a custom list.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tmdbId
+                - mediaType
+              properties:
+                tmdbId:
+                  type: number
+                mediaType:
+                  type: string
+                  enum:
+                    - movie
+                    - tv
+                title:
+                  type: string
+      responses:
+        '201':
+          description: Item added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: number
+                  tmdbId:
+                    type: number
+                  mediaType:
+                    type: string
+                  title:
+                    type: string
+  /user/{userId}/lists/{listId}/items/{itemId}:
+    delete:
+      summary: Remove item from list
+      description: Removes an item from a custom list.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: itemId
+          required: true
+          schema:
+            type: number
+      responses:
+        '204':
+          description: Item removed
+  /user/{userId}/lists/{listId}/items/reorder:
+    put:
+      summary: Reorder list items
+      description: Reorders items in a custom list.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - itemIds
+              properties:
+                itemIds:
+                  type: array
+                  items:
+                    type: number
+      responses:
+        '200':
+          description: Items reordered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+  /user/{userId}/lists/random/pick:
+    get:
+      summary: Pick a random item
+      description: Randomly selects a title from the user's saved lists with optional filters.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: query
+          name: mediaType
+          schema:
+            type: string
+            enum:
+              - movie
+              - tv
+        - in: query
+          name: listId
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Randomly picked item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: number
+                  tmdbId:
+                    type: number
+                  mediaType:
+                    type: string
+                  title:
+                    type: string
   /search:
     get:
       summary: Search for movies, TV shows, or people
@@ -7612,6 +7977,10 @@ paths:
                           type: boolean
                         source:
                           type: string
+                        matchScore:
+                          type: number
+                          nullable: true
+                          description: Bazarr match score for this subtitle (when available)
   /media/{mediaId}/episode/{seasonNumber}/{episodeNumber}/subtitle-streams:
     get:
       summary: Get episode subtitle streams
@@ -7671,6 +8040,10 @@ paths:
                           type: boolean
                         source:
                           type: string
+                        matchScore:
+                          type: number
+                          nullable: true
+                          description: Bazarr match score for this subtitle (when available)
   /media/{mediaId}/subtitle/{language}/download:
     get:
       summary: Download subtitle file

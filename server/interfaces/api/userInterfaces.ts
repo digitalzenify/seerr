@@ -64,8 +64,10 @@ export interface UserStatisticsResponse {
   libraryUtilization: {
     totalMovies: number;
     totalShows: number;
+    totalEpisodes: number;
     watchedMovies: number;
     watchedShows: number;
+    watchedEpisodes: number;
     overallPercentage: number;
   } | null;
 }

@@ -629,6 +629,7 @@ mediaRoutes.get<{ id: string }>(
  * GET /media/:id/subtitle-streams
  * Returns all available subtitle streams from Jellyfin for a media item,
  * grouped by language. Used by the unified subtitle download modal.
+ * Enriches streams with Bazarr match scores when available.
  */
 mediaRoutes.get<{ id: string }>(
   '/:id/subtitle-streams',
@@ -662,6 +663,32 @@ mediaRoutes.get<{ id: string }>(
         return res.status(200).json({ streams: [] });
       }
 
+      // Fetch Bazarr subtitle data for match scores
+      let bazarrScoreMap = new Map<string, number>();
+      const bazarr = getBazarrClient();
+      if (
+        bazarr &&
+        media.mediaType === MediaType.MOVIE &&
+        media.externalServiceId != null
+      ) {
+        try {
+          const bazarrData = await bazarr.getMovieSubtitles(
+            media.externalServiceId
+          );
+          if (bazarrData?.subtitles) {
+            for (const sub of bazarrData.subtitles) {
+              if (sub.path && sub.score != null) {
+                // Map by normalized path basename for matching
+                const basename = sub.path.split(/[\\/]/).pop() ?? sub.path;
+                bazarrScoreMap.set(basename.toLowerCase(), sub.score);
+              }
+            }
+          }
+        } catch {
+          // Bazarr enrichment is best-effort; continue without scores
+        }
+      }
+
       const mediaSource = item.MediaSources[0];
       const subtitleStreams = (mediaSource.MediaStreams ?? [])
         .filter(
@@ -680,18 +707,28 @@ mediaRoutes.get<{ id: string }>(
             IsHearingImpaired?: boolean;
             SupportsExternalStream?: boolean;
             Path?: string;
-          }) => ({
-            index: stream.Index,
-            language: stream.Language ?? 'und',
-            displayTitle: stream.DisplayTitle ?? stream.Title ?? '',
-            codec: stream.Codec ?? '',
-            isForced: stream.IsForced ?? false,
-            isDefault: stream.IsDefault ?? false,
-            isExternal: stream.IsExternal ?? false,
-            isHearingImpaired: stream.IsHearingImpaired ?? false,
-            // Derive source tag from path or other metadata
-            source: deriveSubtitleSource(stream.Path, stream.DisplayTitle),
-          })
+          }) => {
+            // Try to match Bazarr score by subtitle file path
+            let matchScore: number | undefined;
+            if (stream.Path) {
+              const basename =
+                stream.Path.split(/[\\/]/).pop() ?? stream.Path;
+              matchScore = bazarrScoreMap.get(basename.toLowerCase());
+            }
+
+            return {
+              index: stream.Index,
+              language: stream.Language ?? 'und',
+              displayTitle: stream.DisplayTitle ?? stream.Title ?? '',
+              codec: stream.Codec ?? '',
+              isForced: stream.IsForced ?? false,
+              isDefault: stream.IsDefault ?? false,
+              isExternal: stream.IsExternal ?? false,
+              isHearingImpaired: stream.IsHearingImpaired ?? false,
+              source: deriveSubtitleSource(stream.Path, stream.DisplayTitle),
+              ...(matchScore != null ? { matchScore } : {}),
+            };
+          }
         );
 
       return res.status(200).json({ streams: subtitleStreams });
@@ -708,6 +745,7 @@ mediaRoutes.get<{ id: string }>(
 /**
  * GET /media/:id/episode/:seasonNumber/:episodeNumber/subtitle-streams
  * Returns all available subtitle streams from Jellyfin for a TV episode.
+ * Enriches streams with Bazarr match scores when available.
  */
 mediaRoutes.get<{
   id: string;
@@ -754,6 +792,49 @@ mediaRoutes.get<{
         return res.status(200).json({ streams: [] });
       }
 
+      // Try to fetch Bazarr scores for episode subtitles
+      let bazarrScoreMap = new Map<string, number>();
+      const bazarr = getBazarrClient();
+      if (bazarr && media.externalServiceId != null) {
+        try {
+          // Look up the Sonarr episode ID via Sonarr API
+          const settings = getSettings();
+          const sonarrSettings = settings.sonarr.find(
+            (s) => s.isDefault || settings.sonarr.length === 1
+          );
+          if (sonarrSettings) {
+            const sonarr = new SonarrAPI({
+              url: SonarrAPI.buildUrl(sonarrSettings, '/api/v3'),
+              apiKey: sonarrSettings.apiKey,
+            });
+            const sonarrEpisodes = await sonarr.getEpisodes(
+              media.externalServiceId
+            );
+            const matchingEp = sonarrEpisodes.find(
+              (ep) =>
+                ep.seasonNumber === seasonNumber &&
+                ep.episodeNumber === episodeNumber
+            );
+            if (matchingEp?.id) {
+              const bazarrData = await bazarr.getEpisodeSubtitles(
+                matchingEp.id
+              );
+              if (bazarrData?.subtitles) {
+                for (const sub of bazarrData.subtitles) {
+                  if (sub.path && sub.score != null) {
+                    const basename =
+                      sub.path.split(/[\\/]/).pop() ?? sub.path;
+                    bazarrScoreMap.set(basename.toLowerCase(), sub.score);
+                  }
+                }
+              }
+            }
+          }
+        } catch {
+          // Bazarr enrichment is best-effort
+        }
+      }
+
       const mediaSource = episode.MediaSources[0];
       const subtitleStreams = (mediaSource.MediaStreams ?? [])
         .filter(
@@ -772,17 +853,27 @@ mediaRoutes.get<{
             IsHearingImpaired?: boolean;
             SupportsExternalStream?: boolean;
             Path?: string;
-          }) => ({
-            index: stream.Index,
-            language: stream.Language ?? 'und',
-            displayTitle: stream.DisplayTitle ?? stream.Title ?? '',
-            codec: stream.Codec ?? '',
-            isForced: stream.IsForced ?? false,
-            isDefault: stream.IsDefault ?? false,
-            isExternal: stream.IsExternal ?? false,
-            isHearingImpaired: stream.IsHearingImpaired ?? false,
-            source: deriveSubtitleSource(stream.Path, stream.DisplayTitle),
-          })
+          }) => {
+            let matchScore: number | undefined;
+            if (stream.Path) {
+              const basename =
+                stream.Path.split(/[\\/]/).pop() ?? stream.Path;
+              matchScore = bazarrScoreMap.get(basename.toLowerCase());
+            }
+
+            return {
+              index: stream.Index,
+              language: stream.Language ?? 'und',
+              displayTitle: stream.DisplayTitle ?? stream.Title ?? '',
+              codec: stream.Codec ?? '',
+              isForced: stream.IsForced ?? false,
+              isDefault: stream.IsDefault ?? false,
+              isExternal: stream.IsExternal ?? false,
+              isHearingImpaired: stream.IsHearingImpaired ?? false,
+              source: deriveSubtitleSource(stream.Path, stream.DisplayTitle),
+              ...(matchScore != null ? { matchScore } : {}),
+            };
+          }
         );
 
       return res.status(200).json({ streams: subtitleStreams });

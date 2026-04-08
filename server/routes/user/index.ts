@@ -26,11 +26,13 @@ import { isAuthenticated } from '@server/middleware/auth';
 import { getHostname } from '@server/utils/getHostname';
 import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
 import { isOwnProfileOrAdmin } from '@server/utils/profileMiddleware';
+import axios from 'axios';
 import { Router } from 'express';
 import gravatarUrl from 'gravatar-url';
 import { findIndex, sortBy } from 'lodash';
 import type { EntityManager } from 'typeorm';
 import { In, Not } from 'typeorm';
+import userListRoutes from './userlists';
 import userSettingsRoutes from './usersettings';
 
 const router = Router();
@@ -423,6 +425,7 @@ router.get<{ id: string }>('/:id', async (req, res, next) => {
 });
 
 router.use('/:id/settings', userSettingsRoutes);
+router.use('/:id/lists', userListRoutes);
 
 router.get<{ id: string }, UserRequestsResponse>(
   '/:id/requests',
@@ -1006,6 +1009,23 @@ router.get<{ id: string }, UserStatisticsResponse>(
         where: { id: Number(req.params.id) },
       });
 
+      /**
+       * Compute an approximate week key (YYYY-Www) for chart bucketing.
+       * Uses a simplified formula: week = ceil((dayOfYear + jan1DayOfWeek) / 7).
+       * This may differ from ISO 8601 week numbering at year boundaries
+       * (e.g., Dec 31 might map to week 53 instead of week 1 of next year),
+       * but is sufficient for chart display purposes where the goal is
+       * consistent weekly grouping rather than standards compliance.
+       */
+      const getApproxWeekKey = (date: Date): string => {
+        const year = date.getFullYear();
+        const jan1 = new Date(year, 0, 1);
+        const dayOfYear =
+          Math.floor((date.getTime() - jan1.getTime()) / 86400000) + 1;
+        const weekNum = Math.ceil((dayOfYear + jan1.getDay()) / 7);
+        return `${year}-W${String(weekNum).padStart(2, '0')}`;
+      };
+
       // Initialize stats
       const stats: UserStatisticsResponse = {
         totalMoviesWatched: 0,
@@ -1212,19 +1232,22 @@ router.get<{ id: string }, UserStatisticsResponse>(
               // Day tracking
               const dayName = dayNames[playDate.getDay()];
               dayCounts.set(dayName, (dayCounts.get(dayName) ?? 0) + 1);
+            }
 
-              // Genre-by-month tracking for Genre Evolution chart
-              if (item.Genres) {
-                const monthKey = `${playDate.getFullYear()}-${String(
-                  playDate.getMonth() + 1
-                ).padStart(2, '0')}`;
-                if (!monthGenreCounts.has(monthKey)) {
-                  monthGenreCounts.set(monthKey, new Map());
-                }
-                const monthMap = monthGenreCounts.get(monthKey)!;
-                for (const genre of item.Genres) {
-                  monthMap.set(genre, (monthMap.get(genre) ?? 0) + 1);
-                }
+            // Genre-by-week tracking for Genre Evolution chart.
+            // Only use actual DatePlayed (not DateCreated fallback) to avoid
+            // phantom data from items marked as played during library import
+            // that have DateCreated well before the user started watching.
+            if (item.DatePlayed && item.Genres) {
+              const actualPlayDate = new Date(item.DatePlayed);
+              const weekKey = getApproxWeekKey(actualPlayDate);
+
+              if (!monthGenreCounts.has(weekKey)) {
+                monthGenreCounts.set(weekKey, new Map());
+              }
+              const weekMap = monthGenreCounts.get(weekKey)!;
+              for (const genre of item.Genres) {
+                weekMap.set(genre, (weekMap.get(genre) ?? 0) + 1);
               }
             }
           }
@@ -1385,6 +1408,7 @@ router.get<{ id: string }, UserStatisticsResponse>(
             const libraries = await jellyfinClient.getLibraries();
             let totalMovies = 0;
             let totalShows = 0;
+            let totalEpisodes = 0;
             for (const lib of libraries) {
               const contents = await jellyfinClient.getLibraryContents(
                 lib.key
@@ -1394,8 +1418,22 @@ router.get<{ id: string }, UserStatisticsResponse>(
                 if (item.Type === 'Series') totalShows++;
               }
             }
+
+            // Fetch total episode count from Jellyfin
+            try {
+              const epResponse = await axios.get(
+                `${baseUrl}/Items?IncludeItemTypes=Episode&Recursive=true&Limit=0&userId=${encodeURIComponent(
+                  user.jellyfinUserId!
+                )}&api_key=${encodeURIComponent(jf.apiKey)}`
+              );
+              totalEpisodes = epResponse.data?.TotalRecordCount ?? 0;
+            } catch {
+              // If episode count fetch fails, leave as 0
+            }
+
             const watchedMovies = movies.TotalRecordCount;
             const watchedShows = watchedSeriesNames.size;
+            const watchedEpisodes = episodes.TotalRecordCount;
             const totalItems = totalMovies + totalShows;
             const watchedItems = watchedMovies + watchedShows;
             const overallPercentage =
@@ -1405,8 +1443,10 @@ router.get<{ id: string }, UserStatisticsResponse>(
             stats.libraryUtilization = {
               totalMovies,
               totalShows,
+              totalEpisodes,
               watchedMovies,
               watchedShows,
+              watchedEpisodes,
               overallPercentage,
             };
           } catch (libErr) {
