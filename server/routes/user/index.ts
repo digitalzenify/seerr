@@ -32,6 +32,7 @@ import gravatarUrl from 'gravatar-url';
 import { findIndex, sortBy } from 'lodash';
 import type { EntityManager } from 'typeorm';
 import { In, Not } from 'typeorm';
+import userListRoutes from './userlists';
 import userSettingsRoutes from './usersettings';
 
 const router = Router();
@@ -424,6 +425,7 @@ router.get<{ id: string }>('/:id', async (req, res, next) => {
 });
 
 router.use('/:id/settings', userSettingsRoutes);
+router.use('/:id/lists', userListRoutes);
 
 router.get<{ id: string }, UserRequestsResponse>(
   '/:id/requests',
