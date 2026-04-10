@@ -180,7 +180,7 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
           seasonStatusCheck(false))) &&
       validStatuses.includes(event.entity.status)
     ) {
-      this.updateRelatedMediaRequest(
+      await this.updateRelatedMediaRequest(
         event.entity as Media,
         event.databaseEntity as Media,
         false
@@ -192,7 +192,7 @@ export class MediaSubscriber implements EntitySubscriberInterface<Media> {
         (event.entity.mediaType === MediaType.TV && seasonStatusCheck(true))) &&
       validStatuses.includes(event.entity.status4k)
     ) {
-      this.updateRelatedMediaRequest(
+      await this.updateRelatedMediaRequest(
         event.entity as Media,
         event.databaseEntity as Media,
         true

@@ -18,9 +18,9 @@ const messages = defineMessages(
     embedPoster: 'Embed Poster',
     webpushsettingssaved: 'Web push notification settings saved successfully!',
     webpushsettingsfailed: 'Web push notification settings failed to save.',
-    toastWebPushTestSending: 'Sending web push test notification…',
-    toastWebPushTestSuccess: 'Web push test notification sent!',
-    toastWebPushTestFailed: 'Web push test notification failed to send.',
+    toastWebPushTestSending: 'Sending test push notification for a fictional request…',
+    toastWebPushTestSuccess: 'Test push notification sent!',
+    toastWebPushTestFailed: 'Test push notification failed to send.',
     httpsRequirement:
       'In order to receive web push notifications, Seerr must be served over HTTPS.',
   }
