@@ -28,7 +28,7 @@ const VersionStatus = ({ onClick }: VersionStatusProps) => {
     refreshInterval: 60 * 1000,
   });
 
-  if (!data) {
+  if (!data || data.updateAvailable) {
     return null;
   }
 

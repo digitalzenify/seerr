@@ -3,7 +3,7 @@
 // previously cached resources to be updated from the network.
 // This variable is intentionally declared and unused.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const OFFLINE_VERSION = 5;
+const OFFLINE_VERSION = 6;
 const CACHE_NAME = 'offline';
 // Customize this with a different URL if needed.
 const OFFLINE_URL = '/offline.html';
@@ -105,6 +105,13 @@ self.addEventListener('push', (event) => {
         title: 'Decline',
       }
     );
+  }
+
+  if (payload.notificationType === 'MEDIA_AVAILABLE' && payload.actionUrl) {
+    options.actions.push({
+      action: 'view',
+      title: '▶ Watch Now',
+    });
   }
 
   // Set the badge with the amount of pending requests
