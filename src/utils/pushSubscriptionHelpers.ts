@@ -86,10 +86,13 @@ export const verifyAndResubscribePushSubscription = async (
     // existing subscription without requiring a new browser permission prompt.
     const appServerKey = subscription.options?.applicationServerKey;
     if (appServerKey instanceof ArrayBuffer && currentSettings.vapidPublic) {
-      const currentServerKey = new Uint8Array(appServerKey).toString();
-      const expectedServerKey = urlBase64ToUint8Array(
-        currentSettings.vapidPublic
-      ).toString();
+      const currentServerKey = btoa(
+        String.fromCharCode(...new Uint8Array(appServerKey))
+      )
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+      const expectedServerKey = currentSettings.vapidPublic.replace(/=/g, '');
 
       if (currentServerKey === expectedServerKey) {
         // Keys match — subscription is still valid, just missing from backend

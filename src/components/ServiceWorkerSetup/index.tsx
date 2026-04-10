@@ -20,7 +20,8 @@ const ServiceWorkerSetup = () => {
           );
 
           const rawFlag = localStorage.getItem('pushNotificationsEnabled');
-          // Treat null (never set) the same as true — user hasn't explicitly opted out
+          // null means the user has never explicitly opted in or out — treat as
+          // "not disabled" so we can subscribe automatically when conditions are met.
           const isExplicitlyDisabled = rawFlag === 'false';
 
           // If the user explicitly disabled push, do nothing
