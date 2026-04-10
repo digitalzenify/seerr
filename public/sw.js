@@ -110,7 +110,7 @@ self.addEventListener('push', (event) => {
   if (payload.notificationType === 'MEDIA_AVAILABLE' && payload.actionUrl) {
     options.actions.push({
       action: 'view',
-      title: '▶ Watch Now',
+      title: 'Watch Now',
     });
   }
 
