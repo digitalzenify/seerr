@@ -404,7 +404,7 @@ const CalendarPage = () => {
                   {selectedEvent.title}
                 </Link>
                 <div className="mt-1 text-sm text-gray-400">
-                  {new Date(selectedEvent.date + 'T00:00:00').toLocaleDateString(
+                  {new Date(selectedEvent.date.slice(0, 10) + 'T12:00:00').toLocaleDateString(
                     intl.locale,
                     {
                       weekday: 'long',

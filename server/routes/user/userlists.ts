@@ -12,6 +12,9 @@ import { Router } from 'express';
 
 const router = Router({ mergeParams: true });
 
+/** One day in milliseconds, used to include items releasing today */
+const ONE_DAY_MS = 86400000;
+
 // Helper to get userId from parent route params (:id from /user/:id/lists)
 const getUserId = (req: Request): number =>
   Number((req.params as Record<string, string>).id);
@@ -500,7 +503,7 @@ router.get(
             const movie = await tmdb.getMovie({ movieId: item.tmdbId });
             if (movie.release_date) {
               const releaseDate = new Date(movie.release_date);
-              if (releaseDate.getTime() > Date.now() - 86400000) {
+              if (releaseDate.getTime() > Date.now() - ONE_DAY_MS) {
                 events.push({
                   id: item.id,
                   tmdbId: item.tmdbId,
@@ -537,7 +540,7 @@ router.get(
             if (
               tvShow.first_air_date &&
               !tvShow.next_episode_to_air &&
-              new Date(tvShow.first_air_date).getTime() > Date.now() - 86400000
+              new Date(tvShow.first_air_date).getTime() > Date.now() - ONE_DAY_MS
             ) {
               events.push({
                 id: item.id,
