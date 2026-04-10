@@ -90,7 +90,10 @@ self.addEventListener('push', (event) => {
   if (payload.actionUrl) {
     options.actions.push({
       action: 'view',
-      title: payload.actionUrlTitle ?? 'View',
+      title:
+        payload.notificationType === 'MEDIA_AVAILABLE'
+          ? 'Watch Now'
+          : payload.actionUrlTitle ?? 'View',
     });
   }
 
@@ -105,13 +108,6 @@ self.addEventListener('push', (event) => {
         title: 'Decline',
       }
     );
-  }
-
-  if (payload.notificationType === 'MEDIA_AVAILABLE' && payload.actionUrl) {
-    options.actions.push({
-      action: 'view',
-      title: 'Watch Now',
-    });
   }
 
   // Set the badge with the amount of pending requests

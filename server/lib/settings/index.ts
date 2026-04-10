@@ -531,7 +531,7 @@ class Settings {
             },
           },
           webpush: {
-            enabled: false,
+            enabled: true,
             embedPoster: true,
             options: {},
           },
