@@ -6,6 +6,7 @@ import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
 import {
+  CalendarDaysIcon,
   ChartBarSquareIcon,
   ClockIcon,
   CogIcon,
@@ -30,6 +31,7 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   browsetv: 'Series',
   requests: 'Requests',
   collections: 'Collections',
+  calendar: 'Calendar',
   statistics: 'Statistics',
   blocklist: 'Blocklist',
   issues: 'Issues',
@@ -87,6 +89,12 @@ const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'collections',
     svgIcon: <RectangleStackIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/(profile|users\/\d+)\/collections/,
+  },
+  {
+    href: '/profile/calendar',
+    messagesKey: 'calendar',
+    svgIcon: <CalendarDaysIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/(profile|users\/\d+)\/calendar/,
   },
   {
     href: '/profile/statistics',
