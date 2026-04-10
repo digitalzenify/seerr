@@ -5811,6 +5811,55 @@ paths:
                 properties:
                   success:
                     type: boolean
+  /user/{userId}/lists/calendar/events:
+    get:
+      summary: Get calendar events
+      description: Returns upcoming release dates for movies and TV shows in the user's lists.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: query
+          name: listIds
+          schema:
+            type: string
+          description: Comma-separated list IDs to filter by
+      responses:
+        '200':
+          description: Calendar events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: number
+                        tmdbId:
+                          type: number
+                        mediaType:
+                          type: string
+                        title:
+                          type: string
+                        date:
+                          type: string
+                        posterPath:
+                          type: string
+                          nullable: true
+                        listId:
+                          type: number
+                        listName:
+                          type: string
+                        overview:
+                          type: string
   /user/{userId}/lists/random/pick:
     get:
       summary: Pick a random item

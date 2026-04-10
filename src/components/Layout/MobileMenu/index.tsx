@@ -4,6 +4,7 @@ import useClickOutside from '@app/hooks/useClickOutside';
 import { Permission, useUser } from '@app/hooks/useUser';
 import { Transition } from '@headlessui/react';
 import {
+  CalendarDaysIcon,
   ChartBarSquareIcon,
   ClockIcon,
   CogIcon,
@@ -17,6 +18,7 @@ import {
   UsersIcon,
 } from '@heroicons/react/24/outline';
 import {
+  CalendarDaysIcon as FilledCalendarDaysIcon,
   ChartBarSquareIcon as FilledChartBarSquareIcon,
   ClockIcon as FilledClockIcon,
   CogIcon as FilledCogIcon,
@@ -109,6 +111,13 @@ const MobileMenu = ({
       svgIcon: <RectangleStackIcon className="h-6 w-6" />,
       svgIconSelected: <FilledRectangleStackIcon className="h-6 w-6" />,
       activeRegExp: /^\/(profile|users\/\d+)\/collections/,
+    },
+    {
+      href: '/profile/calendar',
+      content: intl.formatMessage(menuMessages.calendar),
+      svgIcon: <CalendarDaysIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledCalendarDaysIcon className="h-6 w-6" />,
+      activeRegExp: /^\/(profile|users\/\d+)\/calendar/,
     },
     {
       href: '/profile/statistics',

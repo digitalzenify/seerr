@@ -4,12 +4,16 @@ import Media from '@server/entity/Media';
 import { User } from '@server/entity/User';
 import { UserList } from '@server/entity/UserList';
 import { UserListItem } from '@server/entity/UserListItem';
+import TheMovieDb from '@server/api/themoviedb';
 import logger from '@server/logger';
 import { isOwnProfileOrAdmin } from '@server/utils/profileMiddleware';
 import type { Request } from 'express';
 import { Router } from 'express';
 
 const router = Router({ mergeParams: true });
+
+/** One day in milliseconds, used to include items releasing today */
+const ONE_DAY_MS = 86400000;
 
 // Helper to get userId from parent route params (:id from /user/:id/lists)
 const getUserId = (req: Request): number =>
@@ -423,6 +427,154 @@ router.put(
         message: (e as Error).message,
       });
       next({ status: 500, message: 'Failed to reorder items.' });
+    }
+  }
+);
+
+/**
+ * GET /user/:id/lists/calendar
+ * Returns calendar events for items in the user's lists with future release dates.
+ * Optional query params: listIds (comma-separated list IDs to filter by)
+ */
+router.get(
+  '/calendar/events',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    try {
+      const userId = getUserId(req);
+      const { listIds } = req.query;
+
+      const itemRepo = getRepository(UserListItem);
+      let query = itemRepo
+        .createQueryBuilder('item')
+        .innerJoinAndSelect('item.list', 'list')
+        .leftJoinAndSelect('item.media', 'media')
+        .where('list.ownerId = :userId', { userId });
+
+      if (listIds && typeof listIds === 'string') {
+        const ids = listIds
+          .split(',')
+          .map((id) => Number(id.trim()))
+          .filter((id) => !isNaN(id));
+        if (ids.length > 0) {
+          query = query.andWhere('list.id IN (:...ids)', { ids });
+        }
+      }
+
+      const allItems = await query.getMany();
+
+      // Fetch TMDB details for each item to get release dates
+      const tmdb = new TheMovieDb();
+      const events: Array<{
+        id: number;
+        tmdbId: number;
+        mediaType: string;
+        title: string;
+        date: string;
+        posterPath: string | null;
+        listId: number;
+        listName: string;
+        overview: string;
+      }> = [];
+
+      const seen = new Set<string>();
+
+      for (const item of allItems) {
+        const key = `${item.tmdbId}-${item.mediaType}`;
+        if (seen.has(key)) {
+          // If same item in multiple lists, add event for each list
+          const existing = events.find(
+            (e) => e.tmdbId === item.tmdbId && e.mediaType === item.mediaType
+          );
+          if (existing) {
+            events.push({
+              ...existing,
+              id: item.id,
+              listId: item.list.id,
+              listName: item.list.name,
+            });
+          }
+          continue;
+        }
+        seen.add(key);
+
+        try {
+          if (item.mediaType === MediaType.MOVIE) {
+            const movie = await tmdb.getMovie({ movieId: item.tmdbId });
+            if (movie.release_date) {
+              const releaseDate = new Date(movie.release_date);
+              if (releaseDate.getTime() > Date.now() - ONE_DAY_MS) {
+                events.push({
+                  id: item.id,
+                  tmdbId: item.tmdbId,
+                  mediaType: item.mediaType,
+                  title: movie.title || item.title,
+                  date: movie.release_date,
+                  posterPath: movie.poster_path ?? null,
+                  listId: item.list.id,
+                  listName: item.list.name,
+                  overview: movie.overview ?? '',
+                });
+              }
+            }
+          } else if (item.mediaType === MediaType.TV) {
+            const tvShow = await tmdb.getTvShow({ tvId: item.tmdbId });
+            // Add next episode air date if available
+            if (tvShow.next_episode_to_air?.air_date) {
+              events.push({
+                id: item.id,
+                tmdbId: item.tmdbId,
+                mediaType: item.mediaType,
+                title: `${tvShow.name || item.title} - S${String(tvShow.next_episode_to_air.season_number).padStart(2, '0')}E${String(tvShow.next_episode_to_air.episode_number).padStart(2, '0')}`,
+                date: tvShow.next_episode_to_air.air_date,
+                posterPath: tvShow.poster_path ?? null,
+                listId: item.list.id,
+                listName: item.list.name,
+                overview:
+                  tvShow.next_episode_to_air.overview ||
+                  tvShow.overview ||
+                  '',
+              });
+            }
+            // Also add first_air_date for unreleased shows
+            if (
+              tvShow.first_air_date &&
+              !tvShow.next_episode_to_air &&
+              new Date(tvShow.first_air_date).getTime() > Date.now() - ONE_DAY_MS
+            ) {
+              events.push({
+                id: item.id,
+                tmdbId: item.tmdbId,
+                mediaType: item.mediaType,
+                title: tvShow.name || item.title,
+                date: tvShow.first_air_date,
+                posterPath: tvShow.poster_path ?? null,
+                listId: item.list.id,
+                listName: item.list.name,
+                overview: tvShow.overview || '',
+              });
+            }
+          }
+        } catch (e) {
+          logger.warn(`Failed to fetch TMDB data for ${item.mediaType} ${item.tmdbId}`, {
+            label: 'UserLists/Calendar',
+            message: (e as Error).message,
+          });
+        }
+      }
+
+      // Sort by date
+      events.sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      return res.status(200).json({ results: events });
+    } catch (e) {
+      logger.error('Failed to fetch calendar events', {
+        label: 'UserLists/Calendar',
+        message: (e as Error).message,
+      });
+      next({ status: 500, message: 'Failed to fetch calendar events.' });
     }
   }
 );

@@ -6,7 +6,7 @@ import {
   PlusIcon,
 } from '@heroicons/react/24/outline';
 import { BookmarkIcon as BookmarkSolidIcon } from '@heroicons/react/24/solid';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -209,6 +209,38 @@ const AddToListButton = ({
   }, []);
 
   const isInAnyList = addedToLists.size > 0;
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  // Reposition dropdown to stay within viewport
+  useLayoutEffect(() => {
+    if (!showDropdown || !menuRef.current || !dropdownRef.current) return;
+
+    const button = dropdownRef.current.getBoundingClientRect();
+    const menu = menuRef.current;
+    const menuWidth = menu.offsetWidth;
+    const viewportWidth = window.innerWidth;
+
+    // Default: align right edge with button right edge
+    let left = button.right - menuWidth;
+
+    // If it goes off the left side, shift it right
+    if (left < 8) {
+      left = 8;
+    }
+
+    // If it goes off the right side, shift it left
+    if (left + menuWidth > viewportWidth - 8) {
+      left = viewportWidth - menuWidth - 8;
+    }
+
+    setDropdownStyle({
+      position: 'fixed',
+      top: button.bottom + 4,
+      left,
+      width: Math.min(menuWidth, viewportWidth - 16),
+    });
+  }, [showDropdown]);
 
   if (!user) return null;
 
@@ -256,7 +288,11 @@ const AddToListButton = ({
 
       {/* Dropdown */}
       {showDropdown && (
-        <div className="absolute right-0 z-50 mt-1 w-56 overflow-hidden rounded-lg bg-gray-800 shadow-lg ring-1 ring-gray-700">
+        <div
+          ref={menuRef}
+          style={dropdownStyle}
+          className="z-50 w-56 overflow-hidden rounded-lg bg-gray-800 shadow-lg ring-1 ring-gray-700"
+        >
           <div className="max-h-64 overflow-y-auto py-1">
             {lists.map((list) => (
               <button
