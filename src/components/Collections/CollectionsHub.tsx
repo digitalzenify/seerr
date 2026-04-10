@@ -37,6 +37,7 @@ const messages = defineMessages('components.Collections', {
   filterAll: 'All',
   filterMovies: 'Movies Only',
   filterTv: 'TV Only',
+  inLibraryOnly: 'In Library Only',
 });
 
 interface UserListSummary {
@@ -82,6 +83,7 @@ const CollectionsHub = () => {
   const [isPickingRandom, setIsPickingRandom] = useState(false);
   const [pickedItem, setPickedItem] = useState<PickedItem | null>(null);
   const [pickFilter, setPickFilter] = useState<'all' | 'movie' | 'tv'>('all');
+  const [pickInLibraryOnly, setPickInLibraryOnly] = useState(false);
   const [showPickResult, setShowPickResult] = useState(false);
 
   const isLoading = !listsData && !error;
@@ -155,6 +157,9 @@ const CollectionsHub = () => {
       if (pickFilter !== 'all') {
         params.set('mediaType', pickFilter);
       }
+      if (pickInLibraryOnly) {
+        params.set('inLibraryOnly', 'true');
+      }
       const response = await fetch(
         `/api/v1/user/${userId}/lists/random/pick?${params.toString()}`
       );
@@ -176,7 +181,7 @@ const CollectionsHub = () => {
       setPickedItem(null);
       setShowPickResult(true);
     }
-  }, [userId, pickFilter]);
+  }, [userId, pickFilter, pickInLibraryOnly]);
 
   if (isLoading || !user) {
     return (
@@ -237,6 +242,16 @@ const CollectionsHub = () => {
                   {intl.formatMessage(messages.filterTv)}
                 </option>
               </select>
+              {/* In Library Only checkbox */}
+              <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={pickInLibraryOnly}
+                  onChange={(e) => setPickInLibraryOnly(e.target.checked)}
+                  className="rounded border-gray-600 bg-gray-700 text-indigo-600 focus:ring-indigo-500"
+                />
+                {intl.formatMessage(messages.inLibraryOnly)}
+              </label>
               <button
                 onClick={handlePickForMe}
                 disabled={isPickingRandom}

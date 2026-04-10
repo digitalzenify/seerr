@@ -156,8 +156,25 @@ const AddToListButton = ({
       await handleAddToList(defaultList.id);
     } else if (lists.length > 0) {
       await handleAddToList(lists[0].id);
+    } else {
+      // No lists yet — auto-create a "Default" list and add to it
+      if (!user?.id) return;
+      try {
+        const res = await fetch(`/api/v1/user/${user.id}/lists`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Default' }),
+        });
+        if (res.ok) {
+          const newList = await res.json();
+          mutate();
+          await handleAddToList(newList.id);
+        }
+      } catch {
+        // Handle error silently
+      }
     }
-  }, [lists, handleAddToList]);
+  }, [lists, handleAddToList, user?.id, mutate]);
 
   const handleCreateAndAdd = useCallback(async () => {
     if (!user?.id || !newListName.trim()) return;

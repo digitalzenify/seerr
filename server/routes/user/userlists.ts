@@ -1,4 +1,4 @@
-import { MediaType } from '@server/constants/media';
+import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { User } from '@server/entity/User';
@@ -438,7 +438,7 @@ router.get(
   async (req, res, next) => {
     try {
       const userId = getUserId(req);
-      const { genre, mediaType, listId } = req.query;
+      const { genre, mediaType, listId, inLibraryOnly } = req.query;
 
       const itemRepo = getRepository(UserListItem);
       let query = itemRepo
@@ -458,6 +458,12 @@ router.get(
         (mediaType === MediaType.MOVIE || mediaType === MediaType.TV)
       ) {
         query = query.andWhere('item.mediaType = :mediaType', { mediaType });
+      }
+
+      if (inLibraryOnly === 'true') {
+        query = query.andWhere('media.status IN (:...statuses)', {
+          statuses: [MediaStatus.AVAILABLE, MediaStatus.PARTIALLY_AVAILABLE],
+        });
       }
 
       const allItems = await query.getMany();
