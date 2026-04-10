@@ -1,3 +1,5 @@
+import { MediaType } from '@server/constants/media';
+import type Media from '@server/entity/Media';
 import type { User } from '@server/entity/User';
 import { Notification } from '@server/lib/notifications';
 import type { NotificationAgent } from '@server/lib/notifications/agents/agent';
@@ -253,7 +255,22 @@ notificationRoutes.post('/webpush/test', async (req, res, next) => {
   }
 
   const webpushAgent = new WebPushAgent(req.body);
-  if (await sendTestNotification(webpushAgent, req.user)) {
+  if (
+    await webpushAgent.send(Notification.MEDIA_AVAILABLE, {
+      notifySystem: true,
+      notifyAdmin: false,
+      notifyUser: req.user,
+      subject: 'Interstellar (2014)',
+      message:
+        "When Earth becomes uninhabitable in the future, a farmer and ex-NASA pilot, Joseph Cooper, is tasked to pilot a spacecraft, along with a team of researchers, to find a new planet for humans.",
+      media: {
+        mediaType: MediaType.MOVIE,
+        tmdbId: 157336,
+      } as Media,
+      image:
+        'https://image.tmdb.org/t/p/w600_and_h900_bestv2/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
+    })
+  ) {
     return res.status(204).send();
   } else {
     return next({
