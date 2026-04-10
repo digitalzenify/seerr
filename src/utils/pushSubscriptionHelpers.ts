@@ -81,6 +81,38 @@ export const verifyAndResubscribePushSubscription = async (
   }
 
   if (subscription) {
+    // Subscription exists in the browser but is not registered in the backend.
+    // Check whether the VAPID keys still match — if so, we can re-register the
+    // existing subscription without requiring a new browser permission prompt.
+    const appServerKey = subscription.options?.applicationServerKey;
+    if (appServerKey instanceof ArrayBuffer && currentSettings.vapidPublic) {
+      const currentServerKey = btoa(
+        String.fromCharCode(...new Uint8Array(appServerKey))
+      )
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+      const expectedServerKey = currentSettings.vapidPublic.replace(/=/g, '');
+
+      if (currentServerKey === expectedServerKey) {
+        // Keys match — subscription is still valid, just missing from backend
+        const { endpoint, keys } = subscription.toJSON();
+        if (endpoint && keys?.p256dh && keys?.auth) {
+          try {
+            await axios.post('/api/v1/user/registerPushSubscription', {
+              endpoint,
+              p256dh: keys.p256dh,
+              auth: keys.auth,
+              userAgent: navigator.userAgent,
+            });
+            return true;
+          } catch {
+            // Re-registration failed — fall through and return false
+          }
+        }
+      }
+    }
+    // VAPID keys changed or re-registration failed — cannot reuse old subscription
     return false;
   }
 

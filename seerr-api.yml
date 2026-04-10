@@ -5834,6 +5834,13 @@ paths:
           name: listId
           schema:
             type: number
+        - in: query
+          name: inLibraryOnly
+          schema:
+            type: string
+            enum:
+              - 'true'
+              - 'false'
       responses:
         '200':
           description: Randomly picked item

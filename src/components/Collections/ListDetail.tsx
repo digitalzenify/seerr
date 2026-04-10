@@ -302,8 +302,8 @@ const ListDetailPage = () => {
         >
           {intl.formatMessage(messages.back)}
         </Link>
-        <div className="mt-4 flex items-center justify-between">
-          <div>
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <Header>{list.name}</Header>
             {list.description && (
               <p className="mt-1 text-sm text-gray-400">{list.description}</p>
@@ -317,7 +317,7 @@ const ListDetailPage = () => {
 
           {/* Pick from this list */}
           {sortedItems.length > 0 && (
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex shrink-0 items-center gap-3 rounded-lg bg-gray-800/60 px-3 py-2.5 ring-1 ring-gray-700/50 sm:flex-col sm:items-end sm:bg-transparent sm:px-0 sm:py-0 sm:ring-0">
               <button
                 onClick={handlePickFromList}
                 disabled={isPickingRandom}

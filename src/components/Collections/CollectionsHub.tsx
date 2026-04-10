@@ -223,14 +223,14 @@ const CollectionsHub = () => {
                 Can&apos;t decide what to watch? Let us pick for you!
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center gap-3 sm:flex-row">
               {/* Filter select */}
               <select
                 value={pickFilter}
                 onChange={(e) =>
                   setPickFilter(e.target.value as 'all' | 'movie' | 'tv')
                 }
-                className="rounded-lg border-0 bg-gray-800 px-3 py-2 text-sm text-white focus:ring-2 focus:ring-indigo-500"
+                className="w-full rounded-lg border-0 bg-gray-800 px-3 py-2 text-sm text-white focus:ring-2 focus:ring-indigo-500 sm:w-auto"
               >
                 <option value="all">
                   {intl.formatMessage(messages.filterAll)}
@@ -242,28 +242,31 @@ const CollectionsHub = () => {
                   {intl.formatMessage(messages.filterTv)}
                 </option>
               </select>
-              {/* In Library Only checkbox */}
-              <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={pickInLibraryOnly}
-                  onChange={(e) => setPickInLibraryOnly(e.target.checked)}
-                  className="rounded border-gray-600 bg-gray-700 text-indigo-600 focus:ring-indigo-500"
-                />
-                {intl.formatMessage(messages.inLibraryOnly)}
-              </label>
-              <button
-                onClick={handlePickForMe}
-                disabled={isPickingRandom}
-                className="flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-purple-500 disabled:opacity-50"
-              >
-                <ArrowPathIcon
-                  className={`h-5 w-5 ${isPickingRandom ? 'animate-spin' : ''}`}
-                />
-                {isPickingRandom
-                  ? intl.formatMessage(messages.picking)
-                  : intl.formatMessage(messages.pickForMe)}
-              </button>
+              {/* Button + checkbox grouped together */}
+              <div className="flex items-center gap-3 rounded-lg bg-gray-800/40 px-3 py-2 ring-1 ring-gray-700/50 sm:bg-transparent sm:px-0 sm:py-0 sm:ring-0">
+                <button
+                  onClick={handlePickForMe}
+                  disabled={isPickingRandom}
+                  className="flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-purple-500 disabled:opacity-50"
+                >
+                  <ArrowPathIcon
+                    className={`h-5 w-5 ${isPickingRandom ? 'animate-spin' : ''}`}
+                  />
+                  {isPickingRandom
+                    ? intl.formatMessage(messages.picking)
+                    : intl.formatMessage(messages.pickForMe)}
+                </button>
+                {/* In Library Only checkbox */}
+                <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={pickInLibraryOnly}
+                    onChange={(e) => setPickInLibraryOnly(e.target.checked)}
+                    className="rounded border-gray-600 bg-gray-700 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {intl.formatMessage(messages.inLibraryOnly)}
+                </label>
+              </div>
             </div>
           </div>
 

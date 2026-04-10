@@ -19,24 +19,30 @@ const ServiceWorkerSetup = () => {
             registration.scope
           );
 
-          const pushNotificationsEnabled =
-            localStorage.getItem('pushNotificationsEnabled') === 'true';
+          const rawFlag = localStorage.getItem('pushNotificationsEnabled');
+          // null means the user has never explicitly opted in or out — treat as
+          // "not disabled" so we can subscribe automatically when conditions are met.
+          const isExplicitlyDisabled = rawFlag === 'false';
 
-          // Reset the notifications flag if permissions were revoked
-          if (
-            Notification.permission !== 'granted' &&
-            pushNotificationsEnabled
-          ) {
+          // If the user explicitly disabled push, do nothing
+          if (isExplicitlyDisabled) {
+            return;
+          }
+
+          // If permission was revoked but we thought it was enabled, clear the flag
+          if (Notification.permission !== 'granted' && rawFlag === 'true') {
             localStorage.setItem('pushNotificationsEnabled', 'false');
             console.warn(
               '[SW] Push permissions not granted — skipping resubscribe'
             );
-
             return;
           }
 
-          // Bypass resubscribing if we have manually disabled push notifications
-          if (!pushNotificationsEnabled) {
+          // Only proceed if permission is already granted and admin has enabled push
+          if (
+            Notification.permission !== 'granted' ||
+            !currentSettings.enablePushRegistration
+          ) {
             return;
           }
 
@@ -53,6 +59,8 @@ const ServiceWorkerSetup = () => {
           );
 
           if (verified) {
+            // Persist that push is enabled so future page loads keep it alive
+            localStorage.setItem('pushNotificationsEnabled', 'true');
             console.log('[SW] Push subscription verified or refreshed.');
           } else {
             console.warn(
