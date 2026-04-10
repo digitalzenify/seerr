@@ -93,7 +93,7 @@ const ListItemRow = ({ item, onRemove, removeLabel }: ListItemRowProps) => {
   );
 
   const isMovieData = (d: MovieDetails | TvDetails): d is MovieDetails =>
-    (d as MovieDetails).title !== undefined;
+    'releaseDate' in d;
 
   const posterPath = tmdbData?.posterPath;
   const displayTitle = tmdbData
