@@ -49,6 +49,9 @@ const messages = defineMessages('components.Settings', {
   hostname: 'Hostname or IP Address',
   port: 'Port',
   enablessl: 'Use SSL',
+  authToken: 'X-Plex-Token',
+  authTokenTip:
+    'Your Plex authentication token. Find it in Plex Web under Settings → Account → Privacy → Show Advanced → Plex Token.',
   plexlibraries: 'Plex Libraries',
   plexlibrariesDescription:
     'The libraries Seerr scans for titles. Set up and save your Plex connection settings, then click the button below if no libraries are listed.',
@@ -375,6 +378,7 @@ const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
           useSsl: data?.useSsl,
           selectedPreset: undefined,
           webAppUrl: data?.webAppUrl,
+          authToken: data?.authToken ?? '',
         }}
         validationSchema={PlexSettingsSchema}
         validateOnMount={true}
@@ -396,6 +400,7 @@ const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
               port: Number(values.port),
               useSsl: values.useSsl,
               webAppUrl: values.webAppUrl,
+              authToken: values.authToken || undefined,
             } as PlexSettings);
 
             syncLibraries();
@@ -599,6 +604,24 @@ const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
                     typeof errors.webAppUrl === 'string' && (
                       <div className="error">{errors.webAppUrl}</div>
                     )}
+                </div>
+              </div>
+              <div className="form-row">
+                <label htmlFor="authToken" className="text-label">
+                  {intl.formatMessage(messages.authToken)}
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.authTokenTip)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <div className="form-input-field">
+                    <SensitiveInput
+                      as="field"
+                      id="authToken"
+                      name="authToken"
+                      autoComplete="off"
+                    />
+                  </div>
                 </div>
               </div>
               <div className="actions">

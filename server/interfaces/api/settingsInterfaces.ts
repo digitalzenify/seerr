@@ -39,6 +39,7 @@ export interface PublicSettingsResponse {
   streamingRegion: string;
   originalLanguage: string;
   mediaServerType: number;
+  mediaServerPrimary: 'plex' | 'jellyfin';
   partialRequestsEnabled: boolean;
   enableSpecialEpisodes: boolean;
   cacheImages: boolean;

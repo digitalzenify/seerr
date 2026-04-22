@@ -22,6 +22,7 @@ const defaultSettings = {
   streamingRegion: '',
   originalLanguage: '',
   mediaServerType: MediaServerType.NOT_CONFIGURED,
+  mediaServerPrimary: 'plex' as 'plex' | 'jellyfin',
   partialRequestsEnabled: true,
   enableSpecialEpisodes: false,
   cacheImages: false,

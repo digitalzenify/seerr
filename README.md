@@ -105,7 +105,76 @@ Example: `http://192.168.1.100:5055/api/v1/service/webhook`
 - The webhook is optional. Without it, Seerr falls back to its 60-second
   polling cycle for status transitions.
 
-## Preview
+## Plex Support
+
+Seerr now treats **Plex** as a first-class media server alongside Jellyfin/Emby.
+
+### Obtaining an X-Plex-Token
+
+The X-Plex-Token authenticates requests from Seerr to your Plex Media Server.
+
+1. Open [Plex Web](https://app.plex.tv/desktop) and sign in.
+2. Navigate to any media item in your library.
+3. Click the **⋮** (More) menu → **Get Info** → **View XML**.
+4. In the URL of the XML page, find the `X-Plex-Token=…` query parameter.
+5. Copy that value — this is your token.
+
+Alternatively, use the official Plex guide: <https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/>
+
+### Obtaining the Machine Identifier
+
+The machine identifier uniquely identifies your Plex Media Server instance.
+
+1. Open `http://<your-plex-ip>:32400/identity` in a browser (no token needed).
+2. Copy the value of the `machineIdentifier` attribute in the response XML.
+
+### Configuring Plex in Settings
+
+1. Open Seerr and go to **Settings → Plex**.
+2. Fill in the following fields:
+   - **Hostname or IP Address**: the LAN IP or hostname of your Plex server.
+   - **Port**: usually `32400`.
+   - **Use SSL**: enable if your Plex server uses HTTPS.
+   - **X-Plex-Token**: paste the token you obtained above.
+   - **Web App URL** *(optional)*: override the Plex Web URL used for deep links.
+3. Click **Save**. Seerr will verify connectivity, populate the Machine ID automatically, and sync your libraries.
+4. Toggle the libraries you want Seerr to manage and click **Sync Libraries**.
+
+### MEDIA_SERVER_PRIMARY Feature Flag
+
+The **Primary Media Server** setting in **Settings → General** controls which server Seerr treats as its source of truth.
+
+| Value | Meaning |
+|-------|---------|
+| `plex` | Plex is the primary server. *(Default for new installs.)* |
+| `jellyfin` | Jellyfin/Emby is the primary server. *(Default for existing Jellyfin installs on upgrade.)* |
+
+> **Phase 1 scope**: This phase ships the configuration layer only.  
+> User-facing UX pivots (e.g., availability badges sourced from Plex instead of Jellyfin) land in later phases. Jellyfin code paths are fully preserved and continue to work regardless of this flag.
+
+### Plex Health Check
+
+Seerr exposes a health endpoint for the configured Plex server:
+
+```
+GET /api/v1/settings/plex/health
+```
+
+Example response when healthy:
+
+```json
+{
+  "healthy": true,
+  "checks": {
+    "reachable": true,
+    "tokenValid": true,
+    "machineIdMatches": true,
+    "libraryDiscoverable": true
+  }
+}
+```
+
+
 
 <img src="./public/preview.jpg" alt="Seerr application preview" />
 

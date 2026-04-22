@@ -70,6 +70,11 @@ const messages = defineMessages('components.Settings.SettingsMain', {
     'Base URL for YouTube videos if a self-hosted YouTube instance is used.',
   validationUrl: 'You must provide a valid URL',
   validationUrlTrailingSlash: 'URL must not end in a trailing slash',
+  mediaServerPrimary: 'Primary Media Server',
+  mediaServerPrimaryTip:
+    'Determines which media server Seerr treats as the source of truth. Set to Plex on new installs; Jellyfin on installs that were already using Jellyfin.',
+  mediaServerPrimaryPlex: 'Plex',
+  mediaServerPrimaryJellyfin: 'Jellyfin',
 });
 
 const SettingsMain = () => {
@@ -175,6 +180,7 @@ const SettingsMain = () => {
             enableSpecialEpisodes: data?.enableSpecialEpisodes,
             cacheImages: data?.cacheImages,
             youtubeUrl: data?.youtubeUrl,
+            mediaServerPrimary: data?.mediaServerPrimary ?? 'plex',
           }}
           enableReinitialize
           validationSchema={MainSettingsSchema}
@@ -195,6 +201,7 @@ const SettingsMain = () => {
                 enableSpecialEpisodes: values.enableSpecialEpisodes,
                 cacheImages: values.cacheImages,
                 youtubeUrl: values.youtubeUrl,
+                mediaServerPrimary: values.mediaServerPrimary,
               });
               mutate('/api/v1/settings/public');
               mutate('/api/v1/status');
@@ -303,6 +310,26 @@ const SettingsMain = () => {
                       typeof errors.applicationUrl === 'string' && (
                         <div className="error">{errors.applicationUrl}</div>
                       )}
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="mediaServerPrimary" className="text-label">
+                    {intl.formatMessage(messages.mediaServerPrimary)}
+                    <span className="label-tip">
+                      {intl.formatMessage(messages.mediaServerPrimaryTip)}
+                    </span>
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <Field as="select" id="mediaServerPrimary" name="mediaServerPrimary">
+                        <option value="plex">
+                          {intl.formatMessage(messages.mediaServerPrimaryPlex)}
+                        </option>
+                        <option value="jellyfin">
+                          {intl.formatMessage(messages.mediaServerPrimaryJellyfin)}
+                        </option>
+                      </Field>
+                    </div>
                   </div>
                 </div>
                 <div className="form-row">
