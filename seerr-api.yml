@@ -245,6 +245,15 @@ components:
         mediaServerType:
           type: number
           example: 1
+        mediaServerPrimary:
+          type: string
+          enum:
+            - plex
+            - jellyfin
+          example: plex
+          description: >
+            Primary media server. 'plex' for new installs; 'jellyfin' for
+            existing Jellyfin/Emby installs on upgrade.
         newPlexLogin:
           type: boolean
           example: true
@@ -2574,6 +2583,35 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/PlexLibrary'
+  /settings/plex/health:
+    get:
+      summary: Plex server health check
+      description: >
+        Checks whether the configured Plex server is reachable, the token is
+        valid, the machine ID matches, and at least one library is discoverable.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Health check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  healthy:
+                    type: boolean
+                  checks:
+                    type: object
+                    properties:
+                      reachable:
+                        type: boolean
+                      tokenValid:
+                        type: boolean
+                      machineIdMatches:
+                        type: boolean
+                      libraryDiscoverable:
+                        type: boolean
   /settings/plex/devices/servers:
     get:
       summary: Gets the user's available Plex servers

@@ -128,7 +128,14 @@ settingsRoutes.post('/plex', async (req, res, next) => {
 
     Object.assign(settings.plex, req.body);
 
-    const plexClient = new PlexAPI({ plexToken: admin.plexToken });
+    // Prefer the authToken sent in the request body, fall back to admin's plexToken
+    const resolvedToken =
+      req.body.authToken || settings.plex.authToken || admin.plexToken;
+
+    const plexClient = new PlexAPI({
+      plexToken: resolvedToken,
+      plexSettings: settings.plex,
+    });
 
     const result = await plexClient.getStatus();
 
@@ -138,6 +145,13 @@ settingsRoutes.post('/plex', async (req, res, next) => {
 
     settings.plex.machineId = result.MediaContainer.machineIdentifier;
     settings.plex.name = result.MediaContainer.friendlyName;
+
+    // Persist the resolved token in settings so it can be used independently of the admin user
+    if (req.body.authToken) {
+      settings.plex.authToken = req.body.authToken;
+    } else if (!settings.plex.authToken && admin.plexToken) {
+      settings.plex.authToken = admin.plexToken;
+    }
 
     await settings.save();
   } catch (e) {
@@ -267,6 +281,67 @@ settingsRoutes.post('/plex/sync', (req, res) => {
     plexFullScanner.run();
   }
   return res.status(200).json(plexFullScanner.status());
+});
+
+settingsRoutes.get('/plex/health', async (_req, res) => {
+  const settings = getSettings();
+  const plex = settings.plex;
+
+  const checks = {
+    reachable: false,
+    tokenValid: false,
+    machineIdMatches: false,
+    libraryDiscoverable: false,
+  };
+
+  const healthy = () =>
+    checks.reachable &&
+    checks.tokenValid &&
+    checks.machineIdMatches &&
+    checks.libraryDiscoverable;
+
+  if (!plex.ip || !plex.authToken) {
+    return res.status(200).json({ healthy: false, checks });
+  }
+
+  try {
+    const plexClient = new PlexAPI({
+      plexToken: plex.authToken,
+      plexSettings: plex,
+      timeout: 5_000,
+    });
+
+    // Check reachability + token validity via identity endpoint
+    let identity: Awaited<ReturnType<typeof plexClient.getIdentity>>;
+    try {
+      identity = await plexClient.getIdentity();
+      checks.reachable = true;
+      checks.tokenValid = true;
+    } catch (e) {
+      checks.reachable = e?.response?.status !== undefined;
+      return res.status(200).json({ healthy: false, checks });
+    }
+
+    // Check machine ID
+    checks.machineIdMatches =
+      !plex.machineId ||
+      identity.MediaContainer.machineIdentifier === plex.machineId;
+
+    // Check at least one library is discoverable
+    try {
+      const libraries = await plexClient.getLibraries();
+      checks.libraryDiscoverable = libraries.length > 0;
+    } catch {
+      checks.libraryDiscoverable = false;
+    }
+  } catch (e) {
+    logger.error('Plex health check error', {
+      label: 'Settings',
+      errorMessage: e.message,
+    });
+  }
+
+  return res.status(200).json({ healthy: healthy(), checks });
 });
 
 settingsRoutes.get('/jellyfin', (_req, res) => {

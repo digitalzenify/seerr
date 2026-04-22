@@ -39,17 +39,16 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
       route: '/settings/users',
       regex: /^\/settings\/users/,
     },
-    settings.currentSettings.mediaServerType === MediaServerType.PLEX
-      ? {
-          text: intl.formatMessage(messages.menuPlexSettings),
-          route: '/settings/plex',
-          regex: /^\/settings\/plex/,
-        }
-      : {
-          text: getAvailableMediaServerName(),
-          route: '/settings/jellyfin',
-          regex: /^\/settings\/jellyfin/,
-        },
+    {
+      text: intl.formatMessage(messages.menuPlexSettings),
+      route: '/settings/plex',
+      regex: /^\/settings\/plex/,
+    },
+    {
+      text: getAvailableMediaServerName(),
+      route: '/settings/jellyfin',
+      regex: /^\/settings\/jellyfin/,
+    },
     {
       text: intl.formatMessage(messages.menuServices),
       route: '/settings/services',
@@ -99,11 +98,9 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
   function getAvailableMediaServerName() {
     return intl.formatMessage(messages.menuJellyfinSettings, {
       mediaServerName:
-        settings.currentSettings.mediaServerType === MediaServerType.JELLYFIN
-          ? 'Jellyfin'
-          : settings.currentSettings.mediaServerType === MediaServerType.EMBY
-            ? 'Emby'
-            : undefined,
+        settings.currentSettings.mediaServerType === MediaServerType.EMBY
+          ? 'Emby'
+          : 'Jellyfin',
     });
   }
 };

@@ -41,6 +41,8 @@ export interface PlexSettings {
   useSsl?: boolean;
   libraries: Library[];
   webAppUrl?: string;
+  /** X-Plex-Token stored in config (mirrors admin user token for token-based auth) */
+  authToken?: string;
 }
 
 export interface JellyfinSettings {
@@ -159,6 +161,8 @@ export interface MainSettings {
   blocklistedTags: string;
   blocklistedTagsLimit: number;
   mediaServerType: number;
+  /** Primary media server: 'plex' (default for new installs) or 'jellyfin' (default for existing Jellyfin installs) */
+  mediaServerPrimary: 'plex' | 'jellyfin';
   partialRequestsEnabled: boolean;
   enableSpecialEpisodes: boolean;
   locale: string;
@@ -208,6 +212,7 @@ interface FullPublicSettings extends PublicSettings {
   streamingRegion: string;
   originalLanguage: string;
   mediaServerType: number;
+  mediaServerPrimary: 'plex' | 'jellyfin';
   jellyfinExternalHost?: string;
   jellyfinForgotPasswordUrl?: string;
   jellyfinServerName?: string;
@@ -421,6 +426,7 @@ class Settings {
         blocklistedTags: '',
         blocklistedTagsLimit: 50,
         mediaServerType: MediaServerType.NOT_CONFIGURED,
+        mediaServerPrimary: 'plex',
         partialRequestsEnabled: true,
         enableSpecialEpisodes: false,
         locale: 'en',
@@ -722,6 +728,7 @@ class Settings {
       streamingRegion: this.data.main.streamingRegion,
       originalLanguage: this.data.main.originalLanguage,
       mediaServerType: this.main.mediaServerType,
+      mediaServerPrimary: this.main.mediaServerPrimary,
       partialRequestsEnabled: this.data.main.partialRequestsEnabled,
       enableSpecialEpisodes: this.data.main.enableSpecialEpisodes,
       cacheImages: this.data.main.cacheImages,
