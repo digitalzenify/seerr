@@ -227,4 +227,3 @@ describe('GET /plex/health (integration)', () => {
     assert.equal(res.body.checks.libraryDiscoverable, false);
   });
 });
-

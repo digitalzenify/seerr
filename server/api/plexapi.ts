@@ -463,4 +463,3 @@ class PlexAPI extends ExternalAPI {
 }
 
 export default PlexAPI;
-
