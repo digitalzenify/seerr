@@ -1,5 +1,6 @@
 import { MediaServerType } from '@server/constants/server';
 import blocklistedTagsProcessor from '@server/job/blocklistedTagsProcessor';
+import autoSeasonRequest from '@server/lib/autoSeasonRequest';
 import availabilitySync from '@server/lib/availabilitySync';
 import downloadTracker from '@server/lib/downloadtracker';
 import ImageProxy from '@server/lib/imageproxy';
@@ -104,6 +105,22 @@ export const startJobs = (): void => {
           });
         });
       }),
+    });
+
+    // Auto-request the next season when users are close to finishing one
+    scheduledJobs.push({
+      id: 'auto-season-request',
+      name: 'Auto Season Request',
+      type: 'process',
+      interval: 'minutes',
+      cronSchedule: jobs['auto-season-request'].schedule,
+      job: schedule.scheduleJob(jobs['auto-season-request'].schedule, () => {
+        logger.info('Starting scheduled job: Auto Season Request', {
+          label: 'Jobs',
+        });
+        autoSeasonRequest.run();
+      }),
+      running: () => autoSeasonRequest.status().running,
     });
   } else if (
     mediaServerType === MediaServerType.JELLYFIN ||
