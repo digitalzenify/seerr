@@ -83,10 +83,14 @@ class CacheManager {
       stdTtl: 86400 * 7, // 1 week cache
       checkPeriod: 60 * 30,
     }),
-    'rt-discover': new Cache('rt-discover', 'Rotten Tomatoes Discover Ratings', {
-      stdTtl: 86400 * 7, // 1 week cache
-      checkPeriod: 60 * 30,
-    }),
+    'rt-discover': new Cache(
+      'rt-discover',
+      'Rotten Tomatoes Discover Ratings',
+      {
+        stdTtl: 86400 * 7, // 1 week cache
+        checkPeriod: 60 * 30,
+      }
+    ),
     'because-you-watched': new Cache(
       'because-you-watched',
       'Because You Watched Recommendations',

@@ -1,10 +1,10 @@
+import TheMovieDb from '@server/api/themoviedb';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { User } from '@server/entity/User';
 import { UserList } from '@server/entity/UserList';
 import { UserListItem } from '@server/entity/UserListItem';
-import TheMovieDb from '@server/api/themoviedb';
 import logger from '@server/logger';
 import { isOwnProfileOrAdmin } from '@server/utils/profileMiddleware';
 import type { Request } from 'express';
@@ -188,7 +188,8 @@ router.put('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
     }
 
     if (description !== undefined) {
-      list.description = typeof description === 'string' ? description.trim() : '';
+      list.description =
+        typeof description === 'string' ? description.trim() : '';
     }
 
     if (sortOrder !== undefined && typeof sortOrder === 'number') {
@@ -255,96 +256,92 @@ router.delete('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
  * POST /user/:id/lists/:listId/items
  * Add an item to a list.
  */
-router.post(
-  '/:listId/items',
-  isOwnProfileOrAdmin(),
-  async (req, res, next) => {
-    try {
-      const { tmdbId, mediaType, title } = req.body;
+router.post('/:listId/items', isOwnProfileOrAdmin(), async (req, res, next) => {
+  try {
+    const { tmdbId, mediaType, title } = req.body;
 
-      if (!tmdbId || !mediaType) {
-        return next({
-          status: 400,
-          message: 'tmdbId and mediaType are required.',
-        });
-      }
-
-      if (mediaType !== MediaType.MOVIE && mediaType !== MediaType.TV) {
-        return next({ status: 400, message: 'Invalid mediaType.' });
-      }
-
-      const listRepo = getRepository(UserList);
-      const list = await listRepo.findOne({
-        where: {
-          id: Number(req.params.listId),
-          owner: { id: getUserId(req) },
-        },
-        relations: { items: true },
+    if (!tmdbId || !mediaType) {
+      return next({
+        status: 400,
+        message: 'tmdbId and mediaType are required.',
       });
+    }
 
-      if (!list) {
-        return next({ status: 404, message: 'List not found.' });
-      }
+    if (mediaType !== MediaType.MOVIE && mediaType !== MediaType.TV) {
+      return next({ status: 400, message: 'Invalid mediaType.' });
+    }
 
-      // Check for duplicates
-      const itemRepo = getRepository(UserListItem);
-      const existing = await itemRepo.findOne({
-        where: {
-          tmdbId: Number(tmdbId),
-          mediaType,
-          list: { id: list.id },
-        },
-      });
+    const listRepo = getRepository(UserList);
+    const list = await listRepo.findOne({
+      where: {
+        id: Number(req.params.listId),
+        owner: { id: getUserId(req) },
+      },
+      relations: { items: true },
+    });
 
-      if (existing) {
-        return next({
-          status: 409,
-          message: 'Item already exists in this list.',
-        });
-      }
+    if (!list) {
+      return next({ status: 404, message: 'List not found.' });
+    }
 
-      // Look up existing Media entry (may be null if not yet in database)
-      const mediaRepo = getRepository(Media);
-      const media = await mediaRepo.findOne({
-        where: { tmdbId: Number(tmdbId), mediaType },
-      });
-
-      // Get highest sort order in this list
-      const maxSortOrder = await itemRepo
-        .createQueryBuilder('item')
-        .select('MAX(item.sortOrder)', 'maxSort')
-        .where('item.listId = :listId', { listId: list.id })
-        .getRawOne();
-
-      const newItem = new UserListItem({
+    // Check for duplicates
+    const itemRepo = getRepository(UserListItem);
+    const existing = await itemRepo.findOne({
+      where: {
         tmdbId: Number(tmdbId),
         mediaType,
-        title: title ?? '',
-        sortOrder: (maxSortOrder?.maxSort ?? -1) + 1,
-        list,
-        media: media ?? undefined,
-      });
+        list: { id: list.id },
+      },
+    });
 
-      const saved = await itemRepo.save(newItem);
-
-      return res.status(201).json({
-        id: saved.id,
-        tmdbId: saved.tmdbId,
-        mediaType: saved.mediaType,
-        title: saved.title,
-        sortOrder: saved.sortOrder,
-        createdAt: saved.createdAt,
-        media: saved.media,
+    if (existing) {
+      return next({
+        status: 409,
+        message: 'Item already exists in this list.',
       });
-    } catch (e) {
-      logger.error('Failed to add item to list', {
-        label: 'UserLists',
-        message: (e as Error).message,
-      });
-      next({ status: 500, message: 'Failed to add item.' });
     }
+
+    // Look up existing Media entry (may be null if not yet in database)
+    const mediaRepo = getRepository(Media);
+    const media = await mediaRepo.findOne({
+      where: { tmdbId: Number(tmdbId), mediaType },
+    });
+
+    // Get highest sort order in this list
+    const maxSortOrder = await itemRepo
+      .createQueryBuilder('item')
+      .select('MAX(item.sortOrder)', 'maxSort')
+      .where('item.listId = :listId', { listId: list.id })
+      .getRawOne();
+
+    const newItem = new UserListItem({
+      tmdbId: Number(tmdbId),
+      mediaType,
+      title: title ?? '',
+      sortOrder: (maxSortOrder?.maxSort ?? -1) + 1,
+      list,
+      media: media ?? undefined,
+    });
+
+    const saved = await itemRepo.save(newItem);
+
+    return res.status(201).json({
+      id: saved.id,
+      tmdbId: saved.tmdbId,
+      mediaType: saved.mediaType,
+      title: saved.title,
+      sortOrder: saved.sortOrder,
+      createdAt: saved.createdAt,
+      media: saved.media,
+    });
+  } catch (e) {
+    logger.error('Failed to add item to list', {
+      label: 'UserLists',
+      message: (e as Error).message,
+    });
+    next({ status: 500, message: 'Failed to add item.' });
   }
-);
+});
 
 /**
  * DELETE /user/:id/lists/:listId/items/:itemId
@@ -465,7 +462,7 @@ router.get(
 
       // Fetch TMDB details for each item to get release dates
       const tmdb = new TheMovieDb();
-      const events: Array<{
+      const events: {
         id: number;
         tmdbId: number;
         mediaType: string;
@@ -475,7 +472,7 @@ router.get(
         listId: number;
         listName: string;
         overview: string;
-      }> = [];
+      }[] = [];
 
       const seen = new Set<string>();
 
@@ -531,16 +528,15 @@ router.get(
                 listId: item.list.id,
                 listName: item.list.name,
                 overview:
-                  tvShow.next_episode_to_air.overview ||
-                  tvShow.overview ||
-                  '',
+                  tvShow.next_episode_to_air.overview || tvShow.overview || '',
               });
             }
             // Also add first_air_date for unreleased shows
             if (
               tvShow.first_air_date &&
               !tvShow.next_episode_to_air &&
-              new Date(tvShow.first_air_date).getTime() > Date.now() - ONE_DAY_MS
+              new Date(tvShow.first_air_date).getTime() >
+                Date.now() - ONE_DAY_MS
             ) {
               events.push({
                 id: item.id,
@@ -556,10 +552,13 @@ router.get(
             }
           }
         } catch (e) {
-          logger.warn(`Failed to fetch TMDB data for ${item.mediaType} ${item.tmdbId}`, {
-            label: 'UserLists/Calendar',
-            message: (e as Error).message,
-          });
+          logger.warn(
+            `Failed to fetch TMDB data for ${item.mediaType} ${item.tmdbId}`,
+            {
+              label: 'UserLists/Calendar',
+              message: (e as Error).message,
+            }
+          );
         }
       }
 
@@ -584,68 +583,64 @@ router.get(
  * Pick a random item from the user's lists.
  * Optional query params: genre, mediaType, maxRuntime, listId
  */
-router.get(
-  '/random/pick',
-  isOwnProfileOrAdmin(),
-  async (req, res, next) => {
-    try {
-      const userId = getUserId(req);
-      const { genre, mediaType, listId, inLibraryOnly } = req.query;
+router.get('/random/pick', isOwnProfileOrAdmin(), async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+    const { mediaType, listId, inLibraryOnly } = req.query;
 
-      const itemRepo = getRepository(UserListItem);
-      let query = itemRepo
-        .createQueryBuilder('item')
-        .innerJoin('item.list', 'list')
-        .leftJoinAndSelect('item.media', 'media')
-        .where('list.ownerId = :userId', { userId });
+    const itemRepo = getRepository(UserListItem);
+    let query = itemRepo
+      .createQueryBuilder('item')
+      .innerJoin('item.list', 'list')
+      .leftJoinAndSelect('item.media', 'media')
+      .where('list.ownerId = :userId', { userId });
 
-      if (listId) {
-        query = query.andWhere('list.id = :listId', {
-          listId: Number(listId),
-        });
-      }
-
-      if (
-        mediaType &&
-        (mediaType === MediaType.MOVIE || mediaType === MediaType.TV)
-      ) {
-        query = query.andWhere('item.mediaType = :mediaType', { mediaType });
-      }
-
-      if (inLibraryOnly === 'true') {
-        query = query.andWhere('media.status IN (:...statuses)', {
-          statuses: [MediaStatus.AVAILABLE, MediaStatus.PARTIALLY_AVAILABLE],
-        });
-      }
-
-      const allItems = await query.getMany();
-
-      if (allItems.length === 0) {
-        return next({
-          status: 404,
-          message: 'No items found matching your criteria.',
-        });
-      }
-
-      // Pick a random item
-      const randomIndex = Math.floor(Math.random() * allItems.length);
-      const picked = allItems[randomIndex];
-
-      return res.status(200).json({
-        id: picked.id,
-        tmdbId: picked.tmdbId,
-        mediaType: picked.mediaType,
-        title: picked.title,
-        media: picked.media,
+    if (listId) {
+      query = query.andWhere('list.id = :listId', {
+        listId: Number(listId),
       });
-    } catch (e) {
-      logger.error('Failed to pick random item', {
-        label: 'UserLists',
-        message: (e as Error).message,
-      });
-      next({ status: 500, message: 'Failed to pick random item.' });
     }
+
+    if (
+      mediaType &&
+      (mediaType === MediaType.MOVIE || mediaType === MediaType.TV)
+    ) {
+      query = query.andWhere('item.mediaType = :mediaType', { mediaType });
+    }
+
+    if (inLibraryOnly === 'true') {
+      query = query.andWhere('media.status IN (:...statuses)', {
+        statuses: [MediaStatus.AVAILABLE, MediaStatus.PARTIALLY_AVAILABLE],
+      });
+    }
+
+    const allItems = await query.getMany();
+
+    if (allItems.length === 0) {
+      return next({
+        status: 404,
+        message: 'No items found matching your criteria.',
+      });
+    }
+
+    // Pick a random item
+    const randomIndex = Math.floor(Math.random() * allItems.length);
+    const picked = allItems[randomIndex];
+
+    return res.status(200).json({
+      id: picked.id,
+      tmdbId: picked.tmdbId,
+      mediaType: picked.mediaType,
+      title: picked.title,
+      media: picked.media,
+    });
+  } catch (e) {
+    logger.error('Failed to pick random item', {
+      label: 'UserLists',
+      message: (e as Error).message,
+    });
+    next({ status: 500, message: 'Failed to pick random item.' });
   }
-);
+});
 
 export default router;

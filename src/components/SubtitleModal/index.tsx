@@ -1,14 +1,13 @@
-import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import useClickOutside from '@app/hooks/useClickOutside';
 import { useLockBodyScroll } from '@app/hooks/useLockBodyScroll';
 import defineMessages from '@app/utils/defineMessages';
+import { Transition } from '@headlessui/react';
 import {
+  ArrowDownTrayIcon,
   LanguageIcon,
   XMarkIcon,
-  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
-import { Transition } from '@headlessui/react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useIntl } from 'react-intl';
@@ -244,7 +243,7 @@ const SubtitleModal = ({
                     <button
                       key={stream.index}
                       onClick={() => handleDownload(currentLangCode)}
-                      className="group flex w-full items-center gap-3 rounded-xl bg-gray-750 p-3 text-left transition hover:bg-gray-700 active:bg-gray-600 sm:p-4"
+                      className="bg-gray-750 group flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-gray-700 active:bg-gray-600 sm:p-4"
                     >
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400">
                         <ArrowDownTrayIcon className="h-4 w-4" />

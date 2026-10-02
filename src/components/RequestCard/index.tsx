@@ -60,7 +60,9 @@ const RequestCardPlaceholder = () => {
 };
 
 interface RequestCardErrorProps {
-  requestData?: NonFunctionProperties<MediaRequest> & { enhancedStatus?: EnhancedStatus };
+  requestData?: NonFunctionProperties<MediaRequest> & {
+    enhancedStatus?: EnhancedStatus;
+  };
 }
 
 const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
@@ -215,7 +217,9 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
 };
 
 interface RequestCardProps {
-  request: NonFunctionProperties<MediaRequest> & { enhancedStatus?: EnhancedStatus };
+  request: NonFunctionProperties<MediaRequest> & {
+    enhancedStatus?: EnhancedStatus;
+  };
   onTitleData?: (requestId: number, title: MovieDetails | TvDetails) => void;
 }
 
@@ -251,26 +255,25 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
     data: requestData,
     error: requestError,
     mutate: revalidate,
-  } = useSWR<NonFunctionProperties<MediaRequest> & { enhancedStatus?: EnhancedStatus }>(
-    `/api/v1/request/${request.id}`,
-    {
-      fallbackData: request,
-      refreshInterval,
-      onSuccess: (fetchedData) => {
-        setRefreshInterval(
-          refreshIntervalHelper(
-            {
-              downloadStatus: fetchedData?.media?.downloadStatus,
-              downloadStatus4k: fetchedData?.media?.downloadStatus4k,
-              status: fetchedData?.media?.status,
-              status4k: fetchedData?.media?.status4k,
-            },
-            15000
-          )
-        );
-      },
-    }
-  );
+  } = useSWR<
+    NonFunctionProperties<MediaRequest> & { enhancedStatus?: EnhancedStatus }
+  >(`/api/v1/request/${request.id}`, {
+    fallbackData: request,
+    refreshInterval,
+    onSuccess: (fetchedData) => {
+      setRefreshInterval(
+        refreshIntervalHelper(
+          {
+            downloadStatus: fetchedData?.media?.downloadStatus,
+            downloadStatus4k: fetchedData?.media?.downloadStatus4k,
+            status: fetchedData?.media?.status,
+            status4k: fetchedData?.media?.status4k,
+          },
+          15000
+        )
+      );
+    },
+  });
 
   const { mediaUrl: plexUrl, mediaUrl4k: plexUrl4k } = useDeepLinks({
     mediaUrl: requestData?.media?.mediaUrl,

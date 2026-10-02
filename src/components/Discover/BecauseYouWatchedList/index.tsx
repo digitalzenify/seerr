@@ -7,12 +7,9 @@ import defineMessages from '@app/utils/defineMessages';
 import type { MovieResult, TvResult } from '@server/models/Search';
 import { useIntl } from 'react-intl';
 
-const messages = defineMessages(
-  'components.Discover.BecauseYouWatchedList',
-  {
-    becauseyouwatched: 'Because You Watched',
-  }
-);
+const messages = defineMessages('components.Discover.BecauseYouWatchedList', {
+  becauseyouwatched: 'Because You Watched',
+});
 
 const BecauseYouWatchedList = () => {
   const intl = useIntl();

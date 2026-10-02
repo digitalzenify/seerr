@@ -18,7 +18,8 @@ const messages = defineMessages(
     embedPoster: 'Embed Poster',
     webpushsettingssaved: 'Web push notification settings saved successfully!',
     webpushsettingsfailed: 'Web push notification settings failed to save.',
-    toastWebPushTestSending: 'Sending test push notification for a fictional request…',
+    toastWebPushTestSending:
+      'Sending test push notification for a fictional request…',
     toastWebPushTestSuccess: 'Test push notification sent!',
     toastWebPushTestFailed: 'Test push notification failed to send.',
     httpsRequirement:

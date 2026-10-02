@@ -88,7 +88,7 @@ const CalendarPage = () => {
   const daysInMonth = lastDayOfMonth.getDate();
 
   const calendarDays = useMemo(() => {
-    const days: Array<{ day: number | null; date: string }> = [];
+    const days: { day: number | null; date: string }[] = [];
 
     // Leading empty cells
     for (let i = 0; i < startDay; i++) {
@@ -132,16 +132,13 @@ const CalendarPage = () => {
     setCurrentDate(new Date());
   }, []);
 
-  const toggleListFilter = useCallback(
-    (listId: number) => {
-      setSelectedListIds((prev) =>
-        prev.includes(listId)
-          ? prev.filter((id) => id !== listId)
-          : [...prev, listId]
-      );
-    },
-    []
-  );
+  const toggleListFilter = useCallback((listId: number) => {
+    setSelectedListIds((prev) =>
+      prev.includes(listId)
+        ? prev.filter((id) => id !== listId)
+        : [...prev, listId]
+    );
+  }, []);
 
   const clearFilters = useCallback(() => {
     setSelectedListIds([]);
@@ -285,10 +282,11 @@ const CalendarPage = () => {
           {/* Calendar cells */}
           <div className="grid grid-cols-7">
             {calendarDays.map((cell, idx) => {
-              const dayEvents = cell.date ? eventsByDate[cell.date] ?? [] : [];
+              const dayEvents = cell.date
+                ? (eventsByDate[cell.date] ?? [])
+                : [];
               const isToday = cell.date === todayStr;
-              const isPast =
-                cell.date && !isToday && cell.date < todayStr;
+              const isPast = cell.date && !isToday && cell.date < todayStr;
 
               return (
                 <div
@@ -301,9 +299,7 @@ const CalendarPage = () => {
                     <>
                       <div
                         className={`mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium sm:h-7 sm:w-7 sm:text-sm ${
-                          isToday
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-gray-400'
+                          isToday ? 'bg-indigo-600 text-white' : 'text-gray-400'
                         }`}
                       >
                         {cell.day}
@@ -357,10 +353,12 @@ const CalendarPage = () => {
 
       {/* Event detail modal */}
       {selectedEvent && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setSelectedEvent(null)}
         >
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
           <div
             className="w-full max-w-md overflow-hidden rounded-xl bg-gray-800 shadow-2xl ring-1 ring-gray-700"
             onClick={(e) => e.stopPropagation()}
@@ -404,15 +402,14 @@ const CalendarPage = () => {
                   {selectedEvent.title}
                 </Link>
                 <div className="mt-1 text-sm text-gray-400">
-                  {new Date(selectedEvent.date.slice(0, 10) + 'T12:00:00').toLocaleDateString(
-                    intl.locale,
-                    {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    }
-                  )}
+                  {new Date(
+                    selectedEvent.date.slice(0, 10) + 'T12:00:00'
+                  ).toLocaleDateString(intl.locale, {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
                 </div>
                 <div className="mt-1 text-xs text-gray-500">
                   {selectedEvent.listName}

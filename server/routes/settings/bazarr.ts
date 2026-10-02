@@ -23,31 +23,30 @@ bazarrRoutes.post('/', async (req, res) => {
   return res.status(201).json(newBazarr);
 });
 
-bazarrRoutes.post<
-  undefined,
-  Record<string, unknown>,
-  BazarrSettings
->('/test', async (req, res, next) => {
-  try {
-    const url = BazarrAPI.buildUrl(req.body);
+bazarrRoutes.post<undefined, Record<string, unknown>, BazarrSettings>(
+  '/test',
+  async (req, res, next) => {
+    try {
+      const url = BazarrAPI.buildUrl(req.body);
 
-    const bazarr = new BazarrAPI(url, req.body.apiKey);
-    const status = await bazarr.getSystemStatus();
+      const bazarr = new BazarrAPI(url, req.body.apiKey);
+      const status = await bazarr.getSystemStatus();
 
-    return res.status(200).json({
-      version: status.bazarr_version,
-      radarrAccessible: status.radarr_accessible,
-      sonarrAccessible: status.sonarr_accessible,
-    });
-  } catch (e) {
-    logger.error('Failed to test Bazarr', {
-      label: 'Bazarr',
-      message: e.message,
-    });
+      return res.status(200).json({
+        version: status.bazarr_version,
+        radarrAccessible: status.radarr_accessible,
+        sonarrAccessible: status.sonarr_accessible,
+      });
+    } catch (e) {
+      logger.error('Failed to test Bazarr', {
+        label: 'Bazarr',
+        message: e.message,
+      });
 
-    next({ status: 500, message: 'Failed to connect to Bazarr' });
+      next({ status: 500, message: 'Failed to connect to Bazarr' });
+    }
   }
-});
+);
 
 bazarrRoutes.put<{ id: string }, BazarrSettings, BazarrSettings>(
   '/:id',

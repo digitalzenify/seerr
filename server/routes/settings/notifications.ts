@@ -262,7 +262,7 @@ notificationRoutes.post('/webpush/test', async (req, res, next) => {
       notifyUser: req.user,
       subject: 'Interstellar (2014)',
       message:
-        "When Earth becomes uninhabitable in the future, a farmer and ex-NASA pilot, Joseph Cooper, is tasked to pilot a spacecraft, along with a team of researchers, to find a new planet for humans.",
+        'When Earth becomes uninhabitable in the future, a farmer and ex-NASA pilot, Joseph Cooper, is tasked to pilot a spacecraft, along with a team of researchers, to find a new planet for humans.',
       media: {
         mediaType: MediaType.MOVIE,
         tmdbId: 157336,

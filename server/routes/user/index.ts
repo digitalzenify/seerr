@@ -1,7 +1,6 @@
 import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
 import TautulliAPI from '@server/api/tautulli';
-import cacheManager from '@server/lib/cache';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import { UserType } from '@server/constants/user';
@@ -19,6 +18,7 @@ import type {
   UserStatisticsResponse,
   UserWatchDataResponse,
 } from '@server/interfaces/api/userInterfaces';
+import cacheManager from '@server/lib/cache';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -1072,9 +1072,7 @@ router.get<{ id: string }, UserStatisticsResponse>(
         const jf = settings.jellyfin;
         if (jf.ip && jf.apiKey) {
           const protocol = jf.useSsl ? 'https' : 'http';
-          const urlBase = jf.urlBase
-            ? `/${jf.urlBase.replace(/^\//, '')}`
-            : '';
+          const urlBase = jf.urlBase ? `/${jf.urlBase.replace(/^\//, '')}` : '';
           const baseUrl = `${protocol}://${jf.ip}:${jf.port}${urlBase}`;
 
           const jellyfinClient = new JellyfinAPI(baseUrl, jf.apiKey);
@@ -1131,17 +1129,15 @@ router.get<{ id: string }, UserStatisticsResponse>(
           // FIX: Sort merged items by DatePlayed descending so that "Most Recent Watch"
           // reflects the actual last-watched item across both movies and episodes,
           // not just the first movie in the unsorted concatenation.
-          const allItems = [...movies.Items, ...episodes.Items].sort(
-            (a, b) => {
-              const dateA = new Date(
-                a.DatePlayed || a.DateCreated || 0
-              ).getTime();
-              const dateB = new Date(
-                b.DatePlayed || b.DateCreated || 0
-              ).getTime();
-              return dateB - dateA;
-            }
-          );
+          const allItems = [...movies.Items, ...episodes.Items].sort((a, b) => {
+            const dateA = new Date(
+              a.DatePlayed || a.DateCreated || 0
+            ).getTime();
+            const dateB = new Date(
+              b.DatePlayed || b.DateCreated || 0
+            ).getTime();
+            return dateB - dateA;
+          });
 
           // Calculate total watch time
           let totalTicksWatched = 0;
@@ -1213,10 +1209,7 @@ router.get<{ id: string }, UserStatisticsResponse>(
             if (premiereDate) {
               const year = new Date(premiereDate).getFullYear();
               const decade = `${Math.floor(year / 10) * 10}s`;
-              decadeCounts.set(
-                decade,
-                (decadeCounts.get(decade) ?? 0) + 1
-              );
+              decadeCounts.set(decade, (decadeCounts.get(decade) ?? 0) + 1);
             }
 
             // Play date tracking for streaks and time insights
@@ -1313,10 +1306,9 @@ router.get<{ id: string }, UserStatisticsResponse>(
           if (allItems.length > 0) {
             const mostRecent = allItems[0];
             stats.mostRecentWatch = {
-              title:
-                mostRecent.SeriesName
-                  ? `${mostRecent.SeriesName} - ${mostRecent.Name}`
-                  : mostRecent.Name,
+              title: mostRecent.SeriesName
+                ? `${mostRecent.SeriesName} - ${mostRecent.Name}`
+                : mostRecent.Name,
               date: mostRecent.DatePlayed || mostRecent.DateCreated || '',
             };
           }
@@ -1379,9 +1371,9 @@ router.get<{ id: string }, UserStatisticsResponse>(
 
           // Preferred watching hour
           if (hourCounts.size > 0) {
-            stats.preferredWatchingHour = Array.from(
-              hourCounts.entries()
-            ).sort((a, b) => b[1] - a[1])[0][0];
+            stats.preferredWatchingHour = Array.from(hourCounts.entries()).sort(
+              (a, b) => b[1] - a[1]
+            )[0][0];
           }
 
           // Most active day
@@ -1410,9 +1402,7 @@ router.get<{ id: string }, UserStatisticsResponse>(
             let totalShows = 0;
             let totalEpisodes = 0;
             for (const lib of libraries) {
-              const contents = await jellyfinClient.getLibraryContents(
-                lib.key
-              );
+              const contents = await jellyfinClient.getLibraryContents(lib.key);
               for (const item of contents) {
                 if (item.Type === 'Movie') totalMovies++;
                 if (item.Type === 'Series') totalShows++;

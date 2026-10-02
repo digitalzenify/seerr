@@ -2,10 +2,7 @@ import Button from '@app/components/Common/Button';
 import Tooltip from '@app/components/Common/Tooltip';
 import SubtitleModal from '@app/components/SubtitleModal';
 import defineMessages from '@app/utils/defineMessages';
-import {
-  ArrowDownTrayIcon,
-  LanguageIcon,
-} from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, LanguageIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
 

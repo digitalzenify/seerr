@@ -1,8 +1,8 @@
+import { getItemDisplayTitle } from '@app/components/Collections/utils';
 import Header from '@app/components/Common/Header';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import ProfileHeader from '@app/components/UserProfile/ProfileHeader';
-import { getItemDisplayTitle } from '@app/components/Collections/utils';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import {
@@ -22,7 +22,7 @@ const messages = defineMessages('components.Collections', {
   createList: 'Create List',
   pickForMe: 'Pick For Me',
   noLists:
-    'You don\'t have any lists yet. Create one to start organizing your watchlist!',
+    "You don't have any lists yet. Create one to start organizing your watchlist!",
   items: '{count, plural, one {# item} other {# items}}',
   defaultList: 'Default',
   deleteConfirm: 'Are you sure you want to delete this list?',
@@ -286,7 +286,9 @@ const CollectionsHub = () => {
                   </Link>
                   <div className="mt-1">
                     <span className="inline-block rounded bg-gray-700 px-2 py-0.5 text-xs text-gray-300">
-                      {pickedItem.mediaType === 'movie' ? '🎬 Movie' : '📺 TV Show'}
+                      {pickedItem.mediaType === 'movie'
+                        ? '🎬 Movie'
+                        : '📺 TV Show'}
                     </span>
                   </div>
                   <button
@@ -318,7 +320,7 @@ const CollectionsHub = () => {
           {lists.map((list) => (
             <div
               key={list.id}
-              className="group relative overflow-hidden rounded-xl bg-gray-800 transition hover:bg-gray-750"
+              className="hover:bg-gray-750 group relative overflow-hidden rounded-xl bg-gray-800 transition"
             >
               <Link
                 href={
@@ -331,6 +333,7 @@ const CollectionsHub = () => {
                 <div className="flex items-start justify-between">
                   <div className="min-w-0 flex-1">
                     {editingListId === list.id ? (
+                      // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
                       <div
                         className="flex items-center gap-2"
                         onClick={(e) => e.preventDefault()}
@@ -344,6 +347,7 @@ const CollectionsHub = () => {
                             if (e.key === 'Escape') setEditingListId(null);
                           }}
                           className="w-full rounded border-0 bg-gray-700 px-2 py-1 text-white focus:ring-2 focus:ring-indigo-500"
+                          // eslint-disable-next-line jsx-a11y/no-autofocus
                           autoFocus
                         />
                         <button
@@ -432,6 +436,7 @@ const CollectionsHub = () => {
                 }}
                 placeholder="List name..."
                 className="w-full rounded-lg border-0 bg-gray-700 px-3 py-2 text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500"
+                // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
               />
               <textarea

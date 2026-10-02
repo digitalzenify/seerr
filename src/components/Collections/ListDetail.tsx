@@ -1,9 +1,9 @@
+import { getItemDisplayTitle } from '@app/components/Collections/utils';
 import CachedImage from '@app/components/Common/CachedImage';
 import Header from '@app/components/Common/Header';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
-import { getItemDisplayTitle } from '@app/components/Collections/utils';
 import TmdbTitleCard from '@app/components/TitleCard/TmdbTitleCard';
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
@@ -26,7 +26,8 @@ import useSWR from 'swr';
 const messages = defineMessages('components.Collections.ListDetail', {
   back: '← Back to Collections',
   items: '{count, plural, one {# item} other {# items}}',
-  noItems: 'This list is empty. Add movies or TV shows from their detail pages!',
+  noItems:
+    'This list is empty. Add movies or TV shows from their detail pages!',
   removeItem: 'Remove',
   pickFromList: 'Pick From This List',
   pickResult: 'You should watch:',
@@ -73,7 +74,8 @@ interface PickedItem {
 
 // Helper to check if a media item is in the library
 const isInLibrary = (status?: MediaStatus): boolean =>
-  status === MediaStatus.AVAILABLE || status === MediaStatus.PARTIALLY_AVAILABLE;
+  status === MediaStatus.AVAILABLE ||
+  status === MediaStatus.PARTIALLY_AVAILABLE;
 
 // Horizontal list-view row that lazily fetches TMDB details
 interface ListItemRowProps {
@@ -183,9 +185,7 @@ const ListDetailPage = () => {
   const userId = router.query.userId
     ? Number(router.query.userId)
     : currentUser?.id;
-  const listId = router.query.listId
-    ? Number(router.query.listId)
-    : undefined;
+  const listId = router.query.listId ? Number(router.query.listId) : undefined;
 
   const {
     data: list,
@@ -211,10 +211,9 @@ const ListDetailPage = () => {
     async (itemId: number) => {
       if (!userId || !listId) return;
       try {
-        await fetch(
-          `/api/v1/user/${userId}/lists/${listId}/items/${itemId}`,
-          { method: 'DELETE' }
-        );
+        await fetch(`/api/v1/user/${userId}/lists/${listId}/items/${itemId}`, {
+          method: 'DELETE',
+        });
         mutate();
       } catch {
         // Handle error silently
@@ -380,9 +379,7 @@ const ListDetailPage = () => {
               <select
                 value={sortBy}
                 onChange={(e) =>
-                  setSortBy(
-                    e.target.value as 'dateAdded' | 'alpha' | 'type'
-                  )
+                  setSortBy(e.target.value as 'dateAdded' | 'alpha' | 'type')
                 }
                 className="rounded border-0 bg-gray-800 px-2 py-1 text-sm text-white focus:ring-2 focus:ring-indigo-500"
               >
