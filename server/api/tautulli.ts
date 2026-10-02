@@ -6,6 +6,10 @@ import type { AxiosInstance } from 'axios';
 import axios from 'axios';
 import { uniqWith } from 'lodash';
 
+// Paging for full show history lookups.
+const HISTORY_PAGE_SIZE = 500;
+const HISTORY_MAX_RECORDS = 4000;
+
 export interface TautulliHistoryRecord {
   date: number;
   duration: number;
@@ -292,6 +296,69 @@ class TautulliAPI {
       );
       throw new Error(
         `[Tautulli] Failed to fetch user watch history: ${e.message}`,
+        { cause: e }
+      );
+    }
+  }
+
+  public async getShowWatchHistory(
+    user: User,
+    grandparentRatingKey: string
+  ): Promise<TautulliHistoryRecord[]> {
+    let results: TautulliHistoryRecord[] = [];
+
+    try {
+      if (!user.plexId) {
+        throw new Error('User does not have an associated Plex ID');
+      }
+
+      const take = HISTORY_PAGE_SIZE;
+      let start = 0;
+
+      while (start < HISTORY_MAX_RECORDS) {
+        const tautulliData = (
+          await this.axios.get<TautulliHistoryResponse>('/api/v2', {
+            params: {
+              cmd: 'get_history',
+              grouping: 0,
+              order_column: 'date',
+              order_dir: 'desc',
+              user_id: user.plexId,
+              media_type: 'episode',
+              grandparent_rating_key: grandparentRatingKey,
+              length: take,
+              start,
+            },
+          })
+        ).data.response.data.data;
+
+        results = results.concat(
+          tautulliData.filter(
+            (record) =>
+              String(record.grandparent_rating_key) ===
+              String(grandparentRatingKey)
+          )
+        );
+
+        if (tautulliData.length < take) {
+          break;
+        }
+
+        start += take;
+      }
+
+      return results;
+    } catch (e) {
+      logger.error(
+        'Something went wrong fetching show watch history from Tautulli',
+        {
+          label: 'Tautulli API',
+          errorMessage: e.message,
+          user: user.displayName,
+        }
+      );
+      throw new Error(
+        `[Tautulli] Failed to fetch show watch history: ${e.message}`,
         { cause: e }
       );
     }

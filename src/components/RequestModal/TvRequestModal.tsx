@@ -50,6 +50,8 @@ const messages = defineMessages('components.RequestModal', {
   autoapproval: 'Automatic Approval',
   requesterror: 'Something went wrong while submitting the request.',
   pendingapproval: 'Your request is pending approval.',
+  seasonLimitHint:
+    'Only one season can be requested at a time. The next season will be requested automatically as you get close to finishing the current one.',
 });
 
 interface RequestModalProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -298,8 +300,13 @@ const TvRequestModal = ({
       setSelectedSeasons((seasons) =>
         seasons.filter((sn) => sn !== seasonNumber)
       );
-    } else {
+    } else if (hasPermission(Permission.MANAGE_REQUESTS)) {
       setSelectedSeasons((seasons) => [...seasons, seasonNumber]);
+    } else {
+      // Only one season can be requested at a time. Selecting a new season
+      // replaces the previous selection; the next season is requested
+      // automatically as the user gets close to finishing the current one.
+      setSelectedSeasons([seasonNumber]);
     }
   };
 
@@ -534,37 +541,39 @@ const TvRequestModal = ({
                         'hidden'
                       }`}
                     >
-                      <span
-                        role="checkbox"
-                        tabIndex={0}
-                        aria-checked={isAllSeasons()}
-                        onClick={() => toggleAllSeasons()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === 'Space') {
-                            toggleAllSeasons();
-                          }
-                        }}
-                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer items-center justify-center pt-2 focus:outline-none ${
-                          quota?.tv.remaining &&
-                          quota.tv.limit &&
-                          quota.tv.remaining < unrequestedSeasons.length
-                            ? 'opacity-50'
-                            : ''
-                        }`}
-                      >
+                      {hasPermission(Permission.MANAGE_REQUESTS) && (
                         <span
-                          aria-hidden="true"
-                          className={`${
-                            isAllSeasons() ? 'bg-indigo-500' : 'bg-gray-800'
-                          } absolute mx-auto h-4 w-9 rounded-full transition-colors duration-200 ease-in-out`}
-                        />
-                        <span
-                          aria-hidden="true"
-                          className={`${
-                            isAllSeasons() ? 'translate-x-5' : 'translate-x-0'
-                          } absolute left-0 inline-block h-5 w-5 rounded-full border border-gray-200 bg-white shadow transition-transform duration-200 ease-in-out group-focus:border-blue-300 group-focus:ring`}
-                        />
-                      </span>
+                          role="checkbox"
+                          tabIndex={0}
+                          aria-checked={isAllSeasons()}
+                          onClick={() => toggleAllSeasons()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === 'Space') {
+                              toggleAllSeasons();
+                            }
+                          }}
+                          className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer items-center justify-center pt-2 focus:outline-none ${
+                            quota?.tv.remaining &&
+                            quota.tv.limit &&
+                            quota.tv.remaining < unrequestedSeasons.length
+                              ? 'opacity-50'
+                              : ''
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`${
+                              isAllSeasons() ? 'bg-indigo-500' : 'bg-gray-800'
+                            } absolute mx-auto h-4 w-9 rounded-full transition-colors duration-200 ease-in-out`}
+                          />
+                          <span
+                            aria-hidden="true"
+                            className={`${
+                              isAllSeasons() ? 'translate-x-5' : 'translate-x-0'
+                            } absolute left-0 inline-block h-5 w-5 rounded-full border border-gray-200 bg-white shadow transition-transform duration-200 ease-in-out group-focus:border-blue-300 group-focus:ring`}
+                          />
+                        </span>
+                      )}
                     </th>
                     <th className="bg-gray-700/80 px-1 py-3 text-left text-xs font-medium uppercase leading-4 tracking-wider text-gray-200 md:px-6">
                       {intl.formatMessage(messages.season)}
@@ -723,6 +732,11 @@ const TvRequestModal = ({
           </div>
         </div>
       </div>
+      {!editRequest && !hasPermission(Permission.MANAGE_REQUESTS) && (
+        <p className="mt-4 text-sm text-gray-400">
+          {intl.formatMessage(messages.seasonLimitHint)}
+        </p>
+      )}
       {(hasPermission(Permission.REQUEST_ADVANCED) ||
         hasPermission(Permission.MANAGE_REQUESTS)) && (
         <AdvancedRequester

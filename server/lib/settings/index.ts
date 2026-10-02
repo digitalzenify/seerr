@@ -371,7 +371,8 @@ export type JobId =
   | 'jellyfin-full-scan'
   | 'image-cache-cleanup'
   | 'availability-sync'
-  | 'process-blocklisted-tags';
+  | 'process-blocklisted-tags'
+  | 'auto-season-request';
 
 export interface AllSettings {
   clientId: string;
@@ -602,6 +603,9 @@ class Settings {
         },
         'process-blocklisted-tags': {
           schedule: '0 30 1 */7 * *',
+        },
+        'auto-season-request': {
+          schedule: '0 */30 * * * *',
         },
       },
       network: {
