@@ -64,6 +64,14 @@ const DownloadBlock = ({
           </span>
         </div>
       </div>
+      {downloadItem.statusMessages &&
+        downloadItem.statusMessages.length > 0 && (
+          <ul className="mb-2 space-y-1 text-xs text-amber-500">
+            {downloadItem.statusMessages.map((message, index) => (
+              <li key={`dl-message-${index}`}>{message}</li>
+            ))}
+          </ul>
+        )}
       <div className="flex items-center justify-between text-xs">
         <span>
           {is4k && (

@@ -5,8 +5,8 @@ import RTRotten from '@app/assets/rt_rotten.svg';
 import Spinner from '@app/assets/spinner.svg';
 import TmdbLogo from '@app/assets/tmdb_logo.svg';
 import BlocklistModal from '@app/components/BlocklistModal';
-import Badge from '@app/components/Common/Badge';
 import AddToListButton from '@app/components/Collections/AddToListButton';
+import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
@@ -57,8 +57,8 @@ import {
 } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import { computeEnhancedStatus } from '@server/lib/enhancedStatus';
-import type { Crew } from '@server/models/common';
 import type { TvDetails as TvDetailsType } from '@server/models/Tv';
+import type { Crew } from '@server/models/common';
 import axios from 'axios';
 import { countries } from 'country-flag-icons';
 import 'country-flag-icons/3x2/flags.css';
@@ -350,7 +350,8 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
         activeRequest.status,
         data.mediaInfo?.status ?? MediaStatus.UNKNOWN,
         data.mediaInfo?.downloadStatus ?? [],
-        data.mediaInfo?.recentlyDownloaded ?? false
+        data.mediaInfo?.recentlyDownloaded ?? false,
+        { requestedSeasons: activeRequest.seasons?.map((s) => s.seasonNumber) }
       )
     : undefined;
 
@@ -365,7 +366,10 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
         activeRequest4k.status,
         data.mediaInfo?.status4k ?? MediaStatus.UNKNOWN,
         data.mediaInfo?.downloadStatus4k ?? [],
-        data.mediaInfo?.recentlyDownloaded4k ?? false
+        data.mediaInfo?.recentlyDownloaded4k ?? false,
+        {
+          requestedSeasons: activeRequest4k.seasons?.map((s) => s.seasonNumber),
+        }
       )
     : undefined;
 
@@ -723,11 +727,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
             isShowComplete={isComplete}
             is4kShowComplete={is4kComplete}
           />
-          <AddToListButton
-            tmdbId={data.id}
-            mediaType="tv"
-            title={data.name}
-          />
+          <AddToListButton tmdbId={data.id} mediaType="tv" title={data.name} />
           {(data.mediaInfo?.status === MediaStatus.AVAILABLE ||
             data.mediaInfo?.status === MediaStatus.PARTIALLY_AVAILABLE ||
             (settings.currentSettings.series4kEnabled &&

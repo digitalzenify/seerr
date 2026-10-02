@@ -10,18 +10,22 @@
  * 1. FULLY AVAILABLE — driven purely by MediaStatus.AVAILABLE; no download
  *    data is needed.
  *
- * 2. ATTENTION_NEEDED — any queue item whose trackedDownloadStatus is
- *    'warning' or 'error'. Only raised when there is a concrete signal from
- *    the *arr queue; we never guess at failure.
+ * 2. ATTENTION_NEEDED — a queue item is genuinely stuck. A concrete failure
+ *    (trackedDownloadStatus 'error' or trackedDownloadState 'importfailed')
+ *    raises this immediately; a mere 'warning' / 'importblocked' item only
+ *    does once it has persisted for at least ATTENTION_PERSIST_MS, because
+ *    transient warnings during import are common and a two-minute hiccup
+ *    should not look like a stuck download.
  *
  * 3. IMPORTING — download is "complete" from the torrent/usenet client's
  *    perspective but the file has not yet been imported into the media
  *    library. Detected via trackedDownloadState ∈ { importPending,
- *    importing } or status === 'completed'. This state is usually brief.
+ *    importing, importblocked } or status === 'completed'. Usually brief.
  *
  * 4. DOWNLOADING — active queue item(s) without an error or import state.
- *    Progress (0-100), sizeLeft, timeLeft, and ETA are included when
- *    available.
+ *    Progress (0-100) is aggregated over every queue item of the request
+ *    (total downloaded bytes / total size) so the label, the progress bar
+ *    and the episode tag all describe the same set of downloads.
  *
  * 5. PARTIALLY_AVAILABLE — MediaStatus.PARTIALLY_AVAILABLE with no active
  *    downloads. Checked after download states so that a partially available
@@ -46,20 +50,23 @@
  * 9. REQUESTED — catch-all for PENDING requests and any edge-cases where
  *    not enough downstream state exists to be more specific.
  *
+ * Season-awareness:
+ * - When `requestedSeasons` is passed, only queue items belonging to those
+ *   seasons are considered, so an S03 download no longer marks an S01
+ *   request as "Downloading". Queue items without episode info are kept.
+ *
  * Limitations:
  * - We do not make live TMDB / *arr calls. All information comes from
  *   already-synced data (Media entity + DownloadTracker cache).
  * - "Waiting for release" and "Waiting for a match" share the same
  *   MediaStatus.PROCESSING bucket; distinguishing them precisely would
  *   require the release date from TMDB, which is out of scope here.
- * - TV shows report a single enhanced status for the whole series (or
- *   4K copy); per-season granularity is left to the existing Season entity.
+ * - The persistence check behind ATTENTION_NEEDED relies on the
+ *   DownloadTracker's per-download state tracking and resets when Seerr
+ *   restarts.
  */
 
-import {
-  MediaRequestStatus,
-  MediaStatus,
-} from '@server/constants/media';
+import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
 
 // ──────────────────────────────────────────────
@@ -75,6 +82,15 @@ export type EnhancedStatusCode =
   | 'available'
   | 'partially_available'
   | 'attention_needed';
+
+export interface EnhancedStatusEpisode {
+  seasonNumber: number;
+  /**
+   * Only set when the download is a single episode; season packs and
+   * multi-episode downloads report the season only.
+   */
+  episodeNumber?: number;
+}
 
 export interface EnhancedStatus {
   /** Machine-readable status code. */
@@ -97,6 +113,21 @@ export interface EnhancedStatus {
    * queue item. Useful for debugging; not shown directly to users.
    */
   trackedDownloadState?: string;
+  /**
+   * Representative episode/season for the badge: SxxEyy for a single
+   * episode, Sxx only for season packs / multi-episode sets.
+   */
+  episode?: EnhancedStatusEpisode;
+}
+
+export interface ComputeEnhancedStatusOptions {
+  /**
+   * Season numbers of the request this status is computed for (TV only).
+   * When set, queue items for other seasons are ignored.
+   */
+  requestedSeasons?: number[];
+  /** Injectable clock (epoch ms) for deterministic tests. */
+  now?: number;
 }
 
 // ──────────────────────────────────────────────
@@ -104,24 +135,97 @@ export interface EnhancedStatus {
 // ──────────────────────────────────────────────
 
 /**
+ * How long a 'warning' / 'importblocked' state must persist before it is
+ * treated as "stuck" rather than a transient hiccup.
+ */
+const ATTENTION_PERSIST_MS = 30 * 60 * 1000;
+
+/**
  * States that indicate the download is finished but not yet imported.
  * All values are stored lowercase; comparisons use `.toLowerCase()` so
  * camelCase values from Radarr/Sonarr (e.g. 'importPending') are matched
- * correctly.
+ * correctly. 'importfailed' is NOT listed here — it is a hard failure and
+ * is surfaced via ATTENTION_NEEDED instead.
  */
 const IMPORTING_STATES = new Set([
   'importpending',
   'importing',
   'importblocked',
-  'importfailed',
 ]);
-
-/** trackedDownloadStatus values that represent a real error or warning. */
-const ERROR_STATUSES = new Set(['warning', 'error']);
 
 function calcProgress(item: DownloadingItem): number {
   if (!item.size || item.size === 0) return 0;
-  return Math.min(100, Math.round(((item.size - item.sizeLeft) / item.size) * 100));
+  return Math.min(
+    100,
+    Math.round(((item.size - item.sizeLeft) / item.size) * 100)
+  );
+}
+
+/** A concrete failure signal from the *arr queue item. */
+function isErrored(item: DownloadingItem): boolean {
+  return (
+    (item.trackedDownloadStatus ?? '').toLowerCase() === 'error' ||
+    (item.trackedDownloadState ?? '').toLowerCase() === 'importfailed'
+  );
+}
+
+/** A warning signal that only counts as "stuck" once it has persisted. */
+function isPersistentlyWarned(item: DownloadingItem, now: number): boolean {
+  const warned =
+    (item.trackedDownloadStatus ?? '').toLowerCase() === 'warning' ||
+    (item.trackedDownloadState ?? '').toLowerCase() === 'importblocked';
+  return warned && now - (item.stateSince ?? now) >= ATTENTION_PERSIST_MS;
+}
+
+/**
+ * Pick a representative episode/season label for a set of queue items:
+ * - single item → SxxEyy
+ * - several items from one download (season pack) → Sxx
+ * - several items from different downloads → Sxx when they all share a
+ *   season, otherwise no label (mixed seasons describe no single request).
+ */
+function pickEpisode(
+  items: DownloadingItem[]
+): EnhancedStatusEpisode | undefined {
+  const first = items[0];
+  if (!first) return undefined;
+
+  if (
+    items.length > 1 &&
+    items.every((d) => d.downloadId === first.downloadId)
+  ) {
+    return first.episode
+      ? { seasonNumber: first.episode.seasonNumber }
+      : undefined;
+  }
+  if (items.length === 1) {
+    return first.episode
+      ? {
+          seasonNumber: first.episode.seasonNumber,
+          episodeNumber: first.episode.episodeNumber,
+        }
+      : undefined;
+  }
+  const seasons = new Set(
+    items
+      .map((d) => d.episode?.seasonNumber)
+      .filter((s): s is number => s !== undefined)
+  );
+  if (seasons.size === 1) {
+    return { seasonNumber: [...seasons][0] };
+  }
+  return undefined;
+}
+
+/** Aggregate progress over all queue items (0 when sizes are unknown). */
+function aggregateProgress(items: DownloadingItem[]): number {
+  const totalSize = items.reduce((sum, d) => sum + (d.size || 0), 0);
+  if (totalSize === 0) return 0;
+  const totalLeft = items.reduce(
+    (sum, d) => sum + Math.min(Math.max(d.sizeLeft || 0, 0), d.size || 0),
+    0
+  );
+  return Math.min(100, Math.round(((totalSize - totalLeft) / totalSize) * 100));
 }
 
 // ──────────────────────────────────────────────
@@ -140,13 +244,30 @@ function calcProgress(item: DownloadingItem): number {
  *                       tracked in the download queue.  This bridges the gap
  *                       between the queue item being removed after import and
  *                       Seerr updating MediaStatus to AVAILABLE.
+ * @param opts           Season filter and injectable clock (see
+ *                       {@link ComputeEnhancedStatusOptions}).
  */
 export function computeEnhancedStatus(
   requestStatus: MediaRequestStatus,
   mediaStatus: MediaStatus,
   downloads: DownloadingItem[],
-  recentlyDownloaded = false
+  recentlyDownloaded = false,
+  opts: ComputeEnhancedStatusOptions = {}
 ): EnhancedStatus {
+  const now = opts.now ?? Date.now();
+
+  // ── Season filter ───────────────────────────────────────────────────────
+  // Only consider queue items belonging to the requested season(s); items
+  // without episode info (e.g. failed grabs) are always kept.
+  const items =
+    opts.requestedSeasons && opts.requestedSeasons.length > 0
+      ? downloads.filter(
+          (d) =>
+            !d.episode ||
+            opts.requestedSeasons!.includes(d.episode.seasonNumber)
+        )
+      : downloads;
+
   // ── 1. Fully available ──────────────────────────────────────────────────
   if (mediaStatus === MediaStatus.AVAILABLE) {
     return { status: 'available', label: 'Available' };
@@ -155,35 +276,33 @@ export function computeEnhancedStatus(
   // ── 2-4. Active queue items ──────────────────────────────────────────────
   // Checked BEFORE PARTIALLY_AVAILABLE so that a show with some seasons
   // already available still shows download progress for new seasons.
-  if (downloads.length > 0) {
-    // 2. Attention needed: any queue item has a concrete error/warning signal
-    const hasError = downloads.some((d) =>
-      ERROR_STATUSES.has((d.trackedDownloadStatus ?? '').toLowerCase())
-    );
-    if (hasError) {
-      const item = downloads.find((d) =>
-        ERROR_STATUSES.has((d.trackedDownloadStatus ?? '').toLowerCase())
-      )!;
+  if (items.length > 0) {
+    // 2. Attention needed: concrete failure immediately, warning only when it
+    // has persisted (transient warnings mid-import are common)
+    const attentionItem =
+      items.find(isErrored) ?? items.find((d) => isPersistentlyWarned(d, now));
+    if (attentionItem) {
       return {
         status: 'attention_needed',
         label: 'Attention Needed',
-        trackedDownloadState: item.trackedDownloadState,
+        trackedDownloadState: attentionItem.trackedDownloadState,
       };
     }
 
     // 3. Importing: download finished, waiting for *arr to import the file
-    const isImporting = downloads.some(
+    const isImporting = items.some(
       (d) =>
         IMPORTING_STATES.has((d.trackedDownloadState ?? '').toLowerCase()) ||
         (d.status ?? '').toLowerCase() === 'completed'
     );
     if (isImporting) {
       const item =
-        downloads.find(
+        items.find(
           (d) =>
-            IMPORTING_STATES.has((d.trackedDownloadState ?? '').toLowerCase()) ||
-            (d.status ?? '').toLowerCase() === 'completed'
-        ) ?? downloads[0];
+            IMPORTING_STATES.has(
+              (d.trackedDownloadState ?? '').toLowerCase()
+            ) || (d.status ?? '').toLowerCase() === 'completed'
+        ) ?? items[0];
       return {
         status: 'importing',
         label: 'Importing',
@@ -191,12 +310,12 @@ export function computeEnhancedStatus(
       };
     }
 
-    // 4. Actively downloading
-    // Use the item with the most progress as the representative item
-    const bestItem = [...downloads].sort(
+    // 4. Actively downloading — aggregate progress across all queue items so
+    // the label, the progress bar and the episode tag describe the same set
+    const bestItem = [...items].sort(
       (a, b) => calcProgress(b) - calcProgress(a)
     )[0];
-    const progress = calcProgress(bestItem);
+    const progress = aggregateProgress(items);
 
     return {
       status: 'downloading',
@@ -206,6 +325,7 @@ export function computeEnhancedStatus(
       timeLeft: bestItem.timeLeft || undefined,
       eta: bestItem.estimatedCompletionTime || undefined,
       trackedDownloadState: bestItem.trackedDownloadState,
+      episode: pickEpisode(items),
     };
   }
 
