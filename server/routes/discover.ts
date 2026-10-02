@@ -7,9 +7,7 @@ import TheMovieDb from '@server/api/themoviedb';
 import type {
   TmdbKeyword,
   TmdbMovieResult,
-  TmdbTvResult,
 } from '@server/api/themoviedb/interfaces';
-import cacheManager from '@server/lib/cache';
 import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
@@ -19,6 +17,7 @@ import type {
   GenreSliderItem,
   WatchlistResponse,
 } from '@server/interfaces/api/discoverInterfaces';
+import cacheManager from '@server/lib/cache';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -996,7 +995,7 @@ function getJellyfinClient(): JellyfinAPI | undefined {
 }
 
 interface BecauseYouWatchedCacheEntry {
-  recommendations: Array<{
+  recommendations: {
     id: number;
     mediaType: 'movie' | 'tv';
     title: string;
@@ -1010,7 +1009,7 @@ interface BecauseYouWatchedCacheEntry {
     originalLanguage: string;
     popularity: number;
     backdropPath?: string;
-  }>;
+  }[];
   generatedAt: number;
 }
 
@@ -1044,9 +1043,7 @@ discoverRoutes.get(
             mapMovieResult(
               result,
               media.find(
-                (m) =>
-                  m.tmdbId === result.id &&
-                  m.mediaType === MediaType.MOVIE
+                (m) => m.tmdbId === result.id && m.mediaType === MediaType.MOVIE
               )
             )
           ),
@@ -1068,8 +1065,7 @@ discoverRoutes.get(
           req.user,
           paged.map((r) => ({
             tmdbId: r.id,
-            mediaType:
-              r.mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV,
+            mediaType: r.mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV,
           }))
         );
 
@@ -1082,9 +1078,7 @@ discoverRoutes.get(
               (m) =>
                 m.tmdbId === r.id &&
                 m.mediaType ===
-                  (r.mediaType === 'movie'
-                    ? MediaType.MOVIE
-                    : MediaType.TV)
+                  (r.mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV)
             );
             if (r.mediaType === 'movie') {
               return {
@@ -1134,9 +1128,7 @@ discoverRoutes.get(
             mapMovieResult(
               result,
               media.find(
-                (m) =>
-                  m.tmdbId === result.id &&
-                  m.mediaType === MediaType.MOVIE
+                (m) => m.tmdbId === result.id && m.mediaType === MediaType.MOVIE
               )
             )
           ),
@@ -1145,10 +1137,10 @@ discoverRoutes.get(
 
       // Map Jellyfin items to TMDB IDs, dedup series by SeriesId
       const seenSeries = new Set<string>();
-      const watchedTmdbItems: Array<{
+      const watchedTmdbItems: {
         tmdbId: number;
         type: 'movie' | 'tv';
-      }> = [];
+      }[] = [];
 
       for (const item of recentlyPlayed) {
         if (item.Type === 'Episode') {
@@ -1157,7 +1149,8 @@ discoverRoutes.get(
           if (seriesId && !seenSeries.has(seriesId)) {
             seenSeries.add(seriesId);
             // Need to fetch the series to get TMDB provider ID
-            const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TheMovieDb;
+            const tmdbId =
+              item.ProviderIds?.Tmdb || item.ProviderIds?.TheMovieDb;
             if (tmdbId) {
               watchedTmdbItems.push({
                 tmdbId: Number(tmdbId),
@@ -1182,8 +1175,7 @@ discoverRoutes.get(
             }
           }
         } else if (item.Type === 'Movie') {
-          const tmdbId =
-            item.ProviderIds?.Tmdb || item.ProviderIds?.TheMovieDb;
+          const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TheMovieDb;
           if (tmdbId) {
             watchedTmdbItems.push({
               tmdbId: Number(tmdbId),
@@ -1274,7 +1266,9 @@ discoverRoutes.get(
 
       // Rank by frequency (higher count = higher rank), then by popularity
       const recommendations = Array.from(recommendationCounts.values())
-        .sort((a, b) => b.count - a.count || b.item.popularity - a.item.popularity)
+        .sort(
+          (a, b) => b.count - a.count || b.item.popularity - a.item.popularity
+        )
         .map((entry) => entry.item);
 
       // Cache the recommendations
@@ -1291,8 +1285,7 @@ discoverRoutes.get(
         req.user,
         paged.map((r) => ({
           tmdbId: r.id,
-          mediaType:
-            r.mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV,
+          mediaType: r.mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV,
         }))
       );
 
@@ -1305,9 +1298,7 @@ discoverRoutes.get(
             (m) =>
               m.tmdbId === r.id &&
               m.mediaType ===
-                (r.mediaType === 'movie'
-                  ? MediaType.MOVIE
-                  : MediaType.TV)
+                (r.mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV)
           );
           if (r.mediaType === 'movie') {
             return {
@@ -1438,13 +1429,10 @@ discoverRoutes.get('/ratings', async (req, res, next) => {
                 imdbCache.set(imdbCacheKey, null);
               }
             } catch (e) {
-              logger.debug(
-                `Failed to fetch IMDB rating for TMDB ${tmdbId}`,
-                {
-                  label: 'Discover Ratings',
-                  message: e.message,
-                }
-              );
+              logger.debug(`Failed to fetch IMDB rating for TMDB ${tmdbId}`, {
+                label: 'Discover Ratings',
+                message: e.message,
+              });
             }
           } else if (cachedImdb !== null) {
             entry.imdbRating = cachedImdb;
@@ -1486,13 +1474,10 @@ discoverRoutes.get('/ratings', async (req, res, next) => {
             ratings[tmdbId] = entry;
           }
         } catch (e) {
-          logger.debug(
-            `Failed to fetch ratings for TMDB ${tmdbId}`,
-            {
-              label: 'Discover Ratings',
-              message: e.message,
-            }
-          );
+          logger.debug(`Failed to fetch ratings for TMDB ${tmdbId}`, {
+            label: 'Discover Ratings',
+            message: e.message,
+          });
           // Don't cache errors - allow retry on next request
         }
       })

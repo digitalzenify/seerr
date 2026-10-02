@@ -37,10 +37,10 @@ export interface UserStatisticsResponse {
   averageWatchTimePerWeekMinutes: number;
 
   // Preferences & Patterns
-  topGenres: Array<{ name: string; count: number }>;
+  topGenres: { name: string; count: number }[];
   favoriteDecade: string | null;
-  topActors: Array<{ name: string; count: number }>;
-  topDirectors: Array<{ name: string; count: number }>;
+  topActors: { name: string; count: number }[];
+  topDirectors: { name: string; count: number }[];
   mostWatchedShow: { name: string; episodeCount: number } | null;
 
   // Fun / Engagement Stats
@@ -55,10 +55,10 @@ export interface UserStatisticsResponse {
   mostActiveDay: string | null;
 
   // Genre Evolution Over Time
-  genresByMonth: Array<{
+  genresByMonth: {
     month: string; // e.g. "2024-01"
-    genres: Array<{ name: string; count: number }>;
-  }>;
+    genres: { name: string; count: number }[];
+  }[];
 
   // Library Utilization
   libraryUtilization: {

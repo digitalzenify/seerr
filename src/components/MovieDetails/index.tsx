@@ -51,7 +51,11 @@ import {
 } from '@heroicons/react/24/solid';
 import { type RatingResponse } from '@server/api/ratings';
 import { IssueStatus } from '@server/constants/issue';
-import { MediaRequestStatus, MediaStatus, MediaType } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import { computeEnhancedStatus } from '@server/lib/enhancedStatus';
 import type { MovieDetails as MovieDetailsType } from '@server/models/Movie';

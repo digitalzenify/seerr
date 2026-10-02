@@ -249,6 +249,7 @@ CoreApp.getInitialProps = async (initialProps) => {
     streamingRegion: '',
     originalLanguage: '',
     mediaServerType: MediaServerType.NOT_CONFIGURED,
+    mediaServerPrimary: 'plex',
     partialRequestsEnabled: true,
     enableSpecialEpisodes: false,
     cacheImages: false,

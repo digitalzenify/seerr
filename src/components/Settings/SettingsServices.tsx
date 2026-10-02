@@ -330,9 +330,7 @@ const SettingsServices = () => {
       {editBazarrModal.open && (
         <BazarrModal
           bazarr={editBazarrModal.bazarr}
-          onClose={() =>
-            setEditBazarrModal({ open: false, bazarr: null })
-          }
+          onClose={() => setEditBazarrModal({ open: false, bazarr: null })}
           onSave={() => {
             revalidateBazarr();
             setEditBazarrModal({ open: false, bazarr: null });
@@ -589,9 +587,7 @@ const SettingsServices = () => {
                           className="focus:ring-blue relative -mr-px inline-flex w-0 flex-1 items-center justify-center rounded-bl-lg border border-transparent py-4 text-sm font-medium leading-5 text-gray-200 transition duration-150 ease-in-out hover:text-white focus:z-10 focus:border-gray-500 focus:outline-none"
                         >
                           <PencilIcon className="mr-2 h-5 w-5" />
-                          <span>
-                            {intl.formatMessage(globalMessages.edit)}
-                          </span>
+                          <span>{intl.formatMessage(globalMessages.edit)}</span>
                         </button>
                       </div>
                       <div className="-ml-px flex w-0 flex-1">

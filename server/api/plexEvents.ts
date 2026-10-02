@@ -17,7 +17,11 @@ import http from 'http';
 import https from 'https';
 import WebSocket from 'ws';
 
-export type PlexEventStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type PlexEventStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'error';
 
 export interface PlexNotificationEvent {
   type: string;
@@ -67,11 +71,7 @@ class PlexEventsClient extends EventEmitter {
   /** Start listening. Safe to call multiple times. */
   public connect(): void {
     if (this.destroyed) return;
-    if (
-      this._status === 'connecting' ||
-      this._status === 'connected'
-    )
-      return;
+    if (this._status === 'connecting' || this._status === 'connected') return;
     this._status = 'connecting';
     this.trySSE();
   }
@@ -145,7 +145,10 @@ class PlexEventsClient extends EventEmitter {
         },
       },
       (res) => {
-        if (res.statusCode === 200 && res.headers['content-type']?.includes('text/event-stream')) {
+        if (
+          res.statusCode === 200 &&
+          res.headers['content-type']?.includes('text/event-stream')
+        ) {
           this.onSSEConnected(res, req);
         } else {
           logger.debug(
@@ -167,9 +170,12 @@ class PlexEventsClient extends EventEmitter {
 
     req.setTimeout(15_000, () => {
       req.destroy();
-      logger.debug('PlexEventsClient: SSE connection timed out, falling back to WebSocket', {
-        label: 'Plex Events',
-      });
+      logger.debug(
+        'PlexEventsClient: SSE connection timed out, falling back to WebSocket',
+        {
+          label: 'Plex Events',
+        }
+      );
       this.tryWebSocket();
     });
 

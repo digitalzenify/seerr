@@ -55,14 +55,20 @@ const ListView = ({
 
   // Batch fetch IMDB + RT ratings (separate calls for movies and tv)
   const { data: movieRatings } = useSWR<
-    Record<number, { imdbRating?: number; rtCriticsRating?: string; rtCriticsScore?: number }>
+    Record<
+      number,
+      { imdbRating?: number; rtCriticsRating?: string; rtCriticsScore?: number }
+    >
   >(
     movieIds.length > 0
       ? `/api/v1/discover/ratings?tmdbIds=${movieIds.join(',')}&mediaType=movie`
       : null
   );
   const { data: tvRatings } = useSWR<
-    Record<number, { imdbRating?: number; rtCriticsRating?: string; rtCriticsScore?: number }>
+    Record<
+      number,
+      { imdbRating?: number; rtCriticsRating?: string; rtCriticsScore?: number }
+    >
   >(
     tvIds.length > 0
       ? `/api/v1/discover/ratings?tmdbIds=${tvIds.join(',')}&mediaType=tv`

@@ -26,6 +26,21 @@ export interface DownloadingItem {
   title: string;
   downloadId: string;
   episode?: EpisodeNumberResult;
+  /** Flattened human-readable messages from the *arr queue item (why it is stuck/warning). */
+  statusMessages?: string[];
+  /** Epoch ms when the current trackedDownloadStatus/State pair was first observed. */
+  stateSince?: number;
+}
+
+/** Flatten *arr `statusMessages` ([{ title, messages }]) into a deduped list of plain strings. */
+function flattenStatusMessages(
+  statusMessages?: { title: string; messages: string[] }[]
+): string[] | undefined {
+  const messages = (statusMessages ?? []).flatMap((m) =>
+    m.messages && m.messages.length > 0 ? m.messages : m.title ? [m.title] : []
+  );
+  const unique = [...new Set(messages)];
+  return unique.length > 0 ? unique : undefined;
 }
 
 class DownloadTracker {
@@ -33,6 +48,17 @@ class DownloadTracker {
   private sonarrServers: Record<number, DownloadingItem[]> = {};
   private lastUpdated = 0;
   private updateInProgress: Promise<void> | null = null;
+
+  /**
+   * Tracks how long each download has been in its current
+   * (trackedDownloadStatus, trackedDownloadState) pair, so transient *arr
+   * warnings can be told apart from genuinely stuck downloads.
+   * Key = `${mediaType}:${downloadId}` (fallback: mediaType:externalId:title).
+   */
+  private downloadStates = new Map<
+    string,
+    { status: string; state: string; since: number; lastSeen: number }
+  >();
 
   /**
    * Tracks media items whose downloads were recently present in the queue
@@ -61,6 +87,12 @@ class DownloadTracker {
    * fall back to "Waiting for Release".
    */
   private static readonly RECENTLY_COMPLETED_TTL_MS = 15 * 60 * 1000;
+
+  /**
+   * How long per-download state entries are kept after the download was
+   * last seen in the queue (24 hours).
+   */
+  private static readonly STATE_TRACKING_TTL_MS = 24 * 60 * 60 * 1000;
 
   public getMovieProgress(
     serverId: number,
@@ -124,26 +156,46 @@ class DownloadTracker {
     if (Date.now() - this.lastUpdated <= maxAgeMs) {
       return;
     }
-    // Coalesce concurrent callers behind the same promise
+    await this.updateDownloads();
+  }
+
+  public async updateDownloads() {
+    // Coalesce concurrent callers (sync job + request routes) behind a single
+    // in-flight update so we never fire duplicate requests against the *arrs.
     if (!this.updateInProgress) {
-      this.updateInProgress = this.updateDownloads().finally(() => {
+      this.updateInProgress = this.doUpdateDownloads().finally(() => {
         this.updateInProgress = null;
       });
     }
     await this.updateInProgress;
   }
 
-  public async updateDownloads() {
+  private async doUpdateDownloads() {
     // Snapshot current externalIds so we can detect items that leave the queue
-    const prevRadarrIds = this.collectExternalIds(this.radarrServers, MediaType.MOVIE);
-    const prevSonarrIds = this.collectExternalIds(this.sonarrServers, MediaType.TV);
+    const prevRadarrIds = this.collectExternalIds(
+      this.radarrServers,
+      MediaType.MOVIE
+    );
+    const prevSonarrIds = this.collectExternalIds(
+      this.sonarrServers,
+      MediaType.TV
+    );
 
     await this.updateRadarrDownloads();
     await this.updateSonarrDownloads();
 
+    // Track how long each download has been in its current state
+    this.trackDownloadStates();
+
     // Detect items that left the queue → mark them as recently completed
-    const newRadarrIds = this.collectExternalIds(this.radarrServers, MediaType.MOVIE);
-    const newSonarrIds = this.collectExternalIds(this.sonarrServers, MediaType.TV);
+    const newRadarrIds = this.collectExternalIds(
+      this.radarrServers,
+      MediaType.MOVIE
+    );
+    const newSonarrIds = this.collectExternalIds(
+      this.sonarrServers,
+      MediaType.TV
+    );
     const now = Date.now();
 
     for (const key of prevRadarrIds) {
@@ -205,6 +257,56 @@ class DownloadTracker {
     return ids;
   }
 
+  /**
+   * Record the current (trackedDownloadStatus, trackedDownloadState) pair of
+   * every queued download, annotating each item with the timestamp the pair
+   * was first observed (stateSince).  Entries not seen for
+   * {@link STATE_TRACKING_TTL_MS} are pruned.
+   */
+  private trackDownloadStates() {
+    const now = Date.now();
+    const seen = new Set<string>();
+
+    const apply = (items: DownloadingItem[]) => {
+      for (const item of items) {
+        const key = item.downloadId
+          ? `${item.mediaType}:${item.downloadId}`
+          : `${item.mediaType}:${item.externalId}:${item.title}`;
+        seen.add(key);
+
+        const prev = this.downloadStates.get(key);
+        if (
+          prev &&
+          prev.status === item.trackedDownloadStatus &&
+          prev.state === item.trackedDownloadState
+        ) {
+          prev.lastSeen = now;
+          item.stateSince = prev.since;
+        } else {
+          this.downloadStates.set(key, {
+            status: item.trackedDownloadStatus,
+            state: item.trackedDownloadState,
+            since: now,
+            lastSeen: now,
+          });
+          item.stateSince = now;
+        }
+      }
+    };
+
+    Object.values(this.radarrServers).forEach(apply);
+    Object.values(this.sonarrServers).forEach(apply);
+
+    for (const [key, entry] of this.downloadStates) {
+      if (
+        !seen.has(key) &&
+        now - entry.lastSeen > DownloadTracker.STATE_TRACKING_TTL_MS
+      ) {
+        this.downloadStates.delete(key);
+      }
+    }
+  }
+
   private async updateRadarrDownloads() {
     const settings = getSettings();
 
@@ -252,6 +354,7 @@ class DownloadTracker {
             timeLeft: item.timeleft,
             title: item.title,
             downloadId: item.downloadId,
+            statusMessages: flattenStatusMessages(item.statusMessages),
           }));
 
           if (queueItems.length > 0) {
@@ -340,6 +443,7 @@ class DownloadTracker {
             title: item.title,
             episode: item.episode,
             downloadId: item.downloadId,
+            statusMessages: flattenStatusMessages(item.statusMessages),
           }));
 
           if (queueItems.length > 0) {

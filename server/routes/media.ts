@@ -488,10 +488,12 @@ function getBazarrClient(): BazarrAPI | undefined {
 /**
  * Helper: build a Jellyfin base URL + API key from settings.
  */
-function getJellyfinConnection(): {
-  baseUrl: string;
-  apiKey: string;
-} | undefined {
+function getJellyfinConnection():
+  | {
+      baseUrl: string;
+      apiKey: string;
+    }
+  | undefined {
   const settings = getSettings();
   const jf = settings.jellyfin;
   if (!jf.ip || !jf.apiKey) return undefined;
@@ -664,7 +666,7 @@ mediaRoutes.get<{ id: string }>(
       }
 
       // Fetch Bazarr subtitle data for match scores
-      let bazarrScoreMap = new Map<string, number>();
+      const bazarrScoreMap = new Map<string, number>();
       const bazarr = getBazarrClient();
       if (
         bazarr &&
@@ -691,9 +693,7 @@ mediaRoutes.get<{ id: string }>(
 
       const mediaSource = item.MediaSources[0];
       const subtitleStreams = (mediaSource.MediaStreams ?? [])
-        .filter(
-          (stream: { Type: string }) => stream.Type === 'Subtitle'
-        )
+        .filter((stream: { Type: string }) => stream.Type === 'Subtitle')
         .map(
           (stream: {
             Index: number;
@@ -711,8 +711,7 @@ mediaRoutes.get<{ id: string }>(
             // Try to match Bazarr score by subtitle file path
             let matchScore: number | undefined;
             if (stream.Path) {
-              const basename =
-                stream.Path.split(/[\\/]/).pop() ?? stream.Path;
+              const basename = stream.Path.split(/[\\/]/).pop() ?? stream.Path;
               matchScore = bazarrScoreMap.get(basename.toLowerCase());
             }
 
@@ -793,7 +792,7 @@ mediaRoutes.get<{
       }
 
       // Try to fetch Bazarr scores for episode subtitles
-      let bazarrScoreMap = new Map<string, number>();
+      const bazarrScoreMap = new Map<string, number>();
       const bazarr = getBazarrClient();
       if (bazarr && media.externalServiceId != null) {
         try {
@@ -822,8 +821,7 @@ mediaRoutes.get<{
               if (bazarrData?.subtitles) {
                 for (const sub of bazarrData.subtitles) {
                   if (sub.path && sub.score != null) {
-                    const basename =
-                      sub.path.split(/[\\/]/).pop() ?? sub.path;
+                    const basename = sub.path.split(/[\\/]/).pop() ?? sub.path;
                     bazarrScoreMap.set(basename.toLowerCase(), sub.score);
                   }
                 }
@@ -837,9 +835,7 @@ mediaRoutes.get<{
 
       const mediaSource = episode.MediaSources[0];
       const subtitleStreams = (mediaSource.MediaStreams ?? [])
-        .filter(
-          (stream: { Type: string }) => stream.Type === 'Subtitle'
-        )
+        .filter((stream: { Type: string }) => stream.Type === 'Subtitle')
         .map(
           (stream: {
             Index: number;
@@ -856,8 +852,7 @@ mediaRoutes.get<{
           }) => {
             let matchScore: number | undefined;
             if (stream.Path) {
-              const basename =
-                stream.Path.split(/[\\/]/).pop() ?? stream.Path;
+              const basename = stream.Path.split(/[\\/]/).pop() ?? stream.Path;
               matchScore = bazarrScoreMap.get(basename.toLowerCase());
             }
 
@@ -939,8 +934,7 @@ mediaRoutes.get<{ id: string; language: string }>(
       const mediaSource = item.MediaSources[0];
       const subtitleStream = mediaSource.MediaStreams?.find(
         (stream: { Type: string; Language?: string }) =>
-          stream.Type === 'Subtitle' &&
-          stream.Language?.toLowerCase() === lang
+          stream.Type === 'Subtitle' && stream.Language?.toLowerCase() === lang
       );
 
       if (!subtitleStream) {
@@ -948,10 +942,7 @@ mediaRoutes.get<{ id: string; language: string }>(
         const bazarr = getBazarrClient();
         if (bazarr && media.externalServiceId != null) {
           try {
-            await bazarr.downloadMovieSubtitle(
-              media.externalServiceId,
-              lang
-            );
+            await bazarr.downloadMovieSubtitle(media.externalServiceId, lang);
             return res.status(202).json({
               message: `Subtitle download for "${lang}" has been triggered. Please try again in a moment.`,
             });
@@ -1147,8 +1138,7 @@ mediaRoutes.get<{
       const mediaSource = episode.MediaSources[0];
       const subtitleStream = mediaSource.MediaStreams?.find(
         (stream: { Type: string; Language?: string }) =>
-          stream.Type === 'Subtitle' &&
-          stream.Language?.toLowerCase() === lang
+          stream.Type === 'Subtitle' && stream.Language?.toLowerCase() === lang
       );
 
       if (!subtitleStream) {

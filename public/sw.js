@@ -93,7 +93,7 @@ self.addEventListener('push', (event) => {
       title:
         payload.notificationType === 'MEDIA_AVAILABLE'
           ? 'Watch Now'
-          : payload.actionUrlTitle ?? 'View',
+          : (payload.actionUrlTitle ?? 'View'),
     });
   }
 

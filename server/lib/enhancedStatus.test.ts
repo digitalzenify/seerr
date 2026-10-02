@@ -4,8 +4,8 @@ import { describe, it } from 'node:test';
 import {
   MediaRequestStatus,
   MediaStatus,
+  MediaType,
 } from '@server/constants/media';
-import { MediaType } from '@server/constants/media';
 import type { DownloadingItem } from '@server/lib/downloadtracker';
 import { computeEnhancedStatus } from '@server/lib/enhancedStatus';
 
@@ -14,6 +14,11 @@ import { computeEnhancedStatus } from '@server/lib/enhancedStatus';
 // ──────────────────────────────────────────────
 
 const noDownloads: DownloadingItem[] = [];
+
+/** Fixed clock so persistence-based assertions are deterministic. */
+const NOW = 1_800_000_000_000;
+/** A timestamp 31 minutes before NOW — past the 30-minute persistence gate. */
+const PERSISTED = NOW - 31 * 60 * 1000;
 
 function makeDownload(
   overrides: Partial<DownloadingItem> = {}
@@ -31,6 +36,15 @@ function makeDownload(
     title: 'Test Movie',
     downloadId: 'abc123',
     ...overrides,
+  };
+}
+
+function makeEpisode(seasonNumber: number, episodeNumber: number) {
+  return {
+    seasonNumber,
+    episodeNumber,
+    absoluteEpisodeNumber: episodeNumber,
+    id: episodeNumber,
   };
 }
 
@@ -85,12 +99,17 @@ describe('computeEnhancedStatus', () => {
     assert.equal(result.status, 'importing');
   });
 
-  it('returns attention_needed when PARTIALLY_AVAILABLE and download has error', () => {
-    const download = makeDownload({ trackedDownloadStatus: 'warning' });
+  it('returns attention_needed when PARTIALLY_AVAILABLE and download has a persisted warning', () => {
+    const download = makeDownload({
+      trackedDownloadStatus: 'warning',
+      stateSince: PERSISTED,
+    });
     const result = computeEnhancedStatus(
       MediaRequestStatus.APPROVED,
       MediaStatus.PARTIALLY_AVAILABLE,
-      [download]
+      [download],
+      false,
+      { now: NOW }
     );
     assert.equal(result.status, 'attention_needed');
   });
@@ -121,7 +140,7 @@ describe('computeEnhancedStatus', () => {
     assert.equal(result.progress, 0);
   });
 
-  it('uses the most-progressed item when multiple downloads exist', () => {
+  it('aggregates progress across multiple downloads', () => {
     const downloads = [
       makeDownload({ size: 1000, sizeLeft: 900 }), // 10%
       makeDownload({ size: 1000, sizeLeft: 200 }), // 80%
@@ -132,7 +151,22 @@ describe('computeEnhancedStatus', () => {
       downloads
     );
     assert.equal(result.status, 'downloading');
-    assert.equal(result.progress, 80);
+    // (2000 - 1100) / 2000 = 45%
+    assert.equal(result.progress, 45);
+  });
+
+  it('weights aggregated progress by item size', () => {
+    const downloads = [
+      makeDownload({ size: 2000, sizeLeft: 1000 }), // 50% of 2 GB
+      makeDownload({ size: 1000, sizeLeft: 0 }), // 100% of 1 GB
+    ];
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      downloads
+    );
+    // (3000 - 1000) / 3000 = 67%
+    assert.equal(result.progress, 67);
   });
 
   // ── Importing ──────────────────────────────────────────────────────────
@@ -173,19 +207,82 @@ describe('computeEnhancedStatus', () => {
     assert.equal(result.status, 'importing');
   });
 
-  // ── Attention Needed ───────────────────────────────────────────────────
-  it('returns attention_needed when trackedDownloadStatus is warning', () => {
-    const download = makeDownload({ trackedDownloadStatus: 'warning' });
+  it('returns importing when trackedDownloadState is importblocked (fresh)', () => {
+    const download = makeDownload({ trackedDownloadState: 'importblocked' });
     const result = computeEnhancedStatus(
       MediaRequestStatus.APPROVED,
       MediaStatus.PROCESSING,
-      [download]
+      [download],
+      false,
+      { now: NOW }
+    );
+    assert.equal(result.status, 'importing');
+  });
+
+  it('returns importing for a fresh warning during import', () => {
+    const download = makeDownload({
+      trackedDownloadStatus: 'warning',
+      trackedDownloadState: 'importPending',
+      stateSince: NOW - 60 * 1000, // 1 minute old
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download],
+      false,
+      { now: NOW }
+    );
+    assert.equal(result.status, 'importing');
+  });
+
+  // ── Attention Needed ───────────────────────────────────────────────────
+  it('does not raise attention_needed for a fresh warning', () => {
+    const download = makeDownload({
+      trackedDownloadStatus: 'warning',
+      stateSince: NOW - 60 * 1000, // 1 minute old
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download],
+      false,
+      { now: NOW }
+    );
+    assert.notEqual(result.status, 'attention_needed');
+  });
+
+  it('raises attention_needed once a warning has persisted for 30+ minutes', () => {
+    const download = makeDownload({
+      trackedDownloadStatus: 'warning',
+      stateSince: PERSISTED,
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download],
+      false,
+      { now: NOW }
     );
     assert.equal(result.status, 'attention_needed');
     assert.equal(result.label, 'Attention Needed');
   });
 
-  it('returns attention_needed when trackedDownloadStatus is error', () => {
+  it('raises attention_needed when importblocked persists for 30+ minutes', () => {
+    const download = makeDownload({
+      trackedDownloadState: 'importblocked',
+      stateSince: PERSISTED,
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download],
+      false,
+      { now: NOW }
+    );
+    assert.equal(result.status, 'attention_needed');
+  });
+
+  it('returns attention_needed immediately when trackedDownloadStatus is error', () => {
     const download = makeDownload({ trackedDownloadStatus: 'error' });
     const result = computeEnhancedStatus(
       MediaRequestStatus.APPROVED,
@@ -195,9 +292,19 @@ describe('computeEnhancedStatus', () => {
     assert.equal(result.status, 'attention_needed');
   });
 
-  it('prioritises attention_needed over importing', () => {
+  it('returns attention_needed immediately when trackedDownloadState is importfailed', () => {
+    const download = makeDownload({ trackedDownloadState: 'importfailed' });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download]
+    );
+    assert.equal(result.status, 'attention_needed');
+  });
+
+  it('prioritises attention_needed (error) over importing', () => {
     const download = makeDownload({
-      trackedDownloadStatus: 'warning',
+      trackedDownloadStatus: 'error',
       trackedDownloadState: 'importPending',
     });
     const result = computeEnhancedStatus(
@@ -206,6 +313,157 @@ describe('computeEnhancedStatus', () => {
       [download]
     );
     assert.equal(result.status, 'attention_needed');
+  });
+
+  it('prioritises persisted attention_needed (warning) over importing', () => {
+    const download = makeDownload({
+      trackedDownloadStatus: 'warning',
+      trackedDownloadState: 'importPending',
+      stateSince: PERSISTED,
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download],
+      false,
+      { now: NOW }
+    );
+    assert.equal(result.status, 'attention_needed');
+  });
+
+  // ── Season filtering ───────────────────────────────────────────────────
+  it('ignores downloads for other seasons when requestedSeasons is set', () => {
+    const download = makeDownload({
+      mediaType: MediaType.TV,
+      episode: makeEpisode(3, 5),
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download],
+      false,
+      { requestedSeasons: [1] }
+    );
+    assert.equal(result.status, 'waiting_for_release');
+  });
+
+  it('keeps downloads for the requested season', () => {
+    const download = makeDownload({
+      mediaType: MediaType.TV,
+      episode: makeEpisode(1, 5),
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download],
+      false,
+      { requestedSeasons: [1] }
+    );
+    assert.equal(result.status, 'downloading');
+  });
+
+  it('keeps queue items without episode info regardless of the season filter', () => {
+    const download = makeDownload({ mediaType: MediaType.TV });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download],
+      false,
+      { requestedSeasons: [1] }
+    );
+    assert.equal(result.status, 'downloading');
+  });
+
+  it('does not filter when requestedSeasons is empty', () => {
+    const download = makeDownload({
+      mediaType: MediaType.TV,
+      episode: makeEpisode(3, 5),
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download],
+      false,
+      { requestedSeasons: [] }
+    );
+    assert.equal(result.status, 'downloading');
+  });
+
+  // ── Episode label ──────────────────────────────────────────────────────
+  it('reports SxxEyy for a single-episode download', () => {
+    const download = makeDownload({
+      mediaType: MediaType.TV,
+      episode: makeEpisode(2, 7),
+    });
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      [download]
+    );
+    assert.deepEqual(result.episode, { seasonNumber: 2, episodeNumber: 7 });
+  });
+
+  it('reports season only for a multi-episode set from one download', () => {
+    const downloads = [
+      makeDownload({
+        mediaType: MediaType.TV,
+        downloadId: 'pack1',
+        episode: makeEpisode(2, 7),
+      }),
+      makeDownload({
+        mediaType: MediaType.TV,
+        downloadId: 'pack1',
+        episode: makeEpisode(2, 8),
+      }),
+    ];
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      downloads
+    );
+    assert.deepEqual(result.episode, { seasonNumber: 2 });
+  });
+
+  it('reports season only when distinct downloads share one season', () => {
+    const downloads = [
+      makeDownload({
+        mediaType: MediaType.TV,
+        downloadId: 'a',
+        episode: makeEpisode(2, 7),
+      }),
+      makeDownload({
+        mediaType: MediaType.TV,
+        downloadId: 'b',
+        episode: makeEpisode(2, 9),
+      }),
+    ];
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      downloads
+    );
+    assert.deepEqual(result.episode, { seasonNumber: 2 });
+  });
+
+  it('reports no episode label for downloads spanning multiple seasons', () => {
+    const downloads = [
+      makeDownload({
+        mediaType: MediaType.TV,
+        downloadId: 'a',
+        episode: makeEpisode(1, 7),
+      }),
+      makeDownload({
+        mediaType: MediaType.TV,
+        downloadId: 'b',
+        episode: makeEpisode(2, 1),
+      }),
+    ];
+    const result = computeEnhancedStatus(
+      MediaRequestStatus.APPROVED,
+      MediaStatus.PROCESSING,
+      downloads
+    );
+    assert.equal(result.episode, undefined);
   });
 
   // ── Waiting for release ────────────────────────────────────────────────

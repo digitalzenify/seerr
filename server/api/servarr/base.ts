@@ -62,6 +62,10 @@ interface QueueItem {
   downloadClient: string;
   indexer: string;
   id: number;
+  statusMessages?: {
+    title: string;
+    messages: string[];
+  }[];
 }
 
 export interface Tag {

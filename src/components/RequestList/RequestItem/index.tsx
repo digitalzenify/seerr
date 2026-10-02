@@ -19,8 +19,10 @@ import {
 import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
-import type { EnhancedStatus } from '@server/interfaces/api/requestInterfaces';
-import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
+import type {
+  EnhancedStatus,
+  RequestResultsResponse,
+} from '@server/interfaces/api/requestInterfaces';
 import type { MovieDetails } from '@server/models/Movie';
 import type { TvDetails } from '@server/models/Tv';
 import axios from 'axios';
@@ -54,7 +56,9 @@ const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
 };
 
 interface RequestItemErrorProps {
-  requestData?: NonFunctionProperties<MediaRequest> & { enhancedStatus?: EnhancedStatus };
+  requestData?: NonFunctionProperties<MediaRequest> & {
+    enhancedStatus?: EnhancedStatus;
+  };
   revalidateList: () => void;
 }
 

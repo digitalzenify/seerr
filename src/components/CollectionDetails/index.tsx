@@ -85,10 +85,7 @@ const CollectionDetails = ({ collection }: CollectionDetailsProps) => {
     refreshInterval,
     onSuccess: (fetchedData) => {
       setRefreshInterval(
-        refreshIntervalHelper(
-          returnCollectionDownloadItems(fetchedData),
-          15000
-        )
+        refreshIntervalHelper(returnCollectionDownloadItems(fetchedData), 15000)
       );
     },
   });

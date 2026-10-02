@@ -54,8 +54,9 @@ const StatusBadge = ({
   let mediaLink: string | undefined;
   let mediaLinkDescription: string | undefined;
 
-  const calculateDownloadProgress = (media: DownloadingItem) => {
-    return Math.round(((media?.size - media?.sizeLeft) / media?.size) * 100);
+  const calculateDownloadProgress = (media?: DownloadingItem) => {
+    if (!media?.size) return 0;
+    return Math.round(((media.size - media.sizeLeft) / media.size) * 100);
   };
 
   if (
@@ -149,7 +150,7 @@ const StatusBadge = ({
       </ul>
     );
 
-  const badgeDownloadProgress = (
+  const badgeDownloadProgress = (percent: number) => (
     <div
       className={`absolute left-0 top-0 z-10 flex h-full ${
         status === MediaStatus.DELETED
@@ -158,11 +159,7 @@ const StatusBadge = ({
             ? 'bg-indigo-500/80'
             : 'bg-green-500/80'
       } transition-all duration-200 ease-in-out`}
-      style={{
-        width: `${
-          downloadItem ? calculateDownloadProgress(downloadItem[0]) : 0
-        }%`,
-      }}
+      style={{ width: `${percent}%` }}
     />
   );
 
@@ -186,9 +183,7 @@ const StatusBadge = ({
         return (
           <Tooltip
             content={inProgress ? tooltipContent : mediaLinkDescription}
-            className={`${
-              inProgress && 'max-h-96 w-96 overflow-y-auto'
-            }`}
+            className={`${inProgress && 'max-h-96 w-96 overflow-y-auto'}`}
             tooltipConfig={{
               ...(inProgress && { interactive: true, delayHide: 100 }),
             }}
@@ -196,32 +191,26 @@ const StatusBadge = ({
             <Badge
               badgeType="primary"
               href={mediaLink}
-              className="relative !bg-gray-700/80 !px-0 overflow-hidden hover:!bg-gray-700"
+              className="relative overflow-hidden !bg-gray-700/80 !px-0 hover:!bg-gray-700"
             >
-              {badgeDownloadProgress}
+              {badgeDownloadProgress(
+                enhancedStatus.progress ??
+                  calculateDownloadProgress(downloadItem[0])
+              )}
               <div className="relative z-20 flex items-center px-2">
                 <span>{labelText}</span>
-                {mediaType === 'tv' &&
-                  downloadItem[0]?.episode &&
-                  (downloadItem.length > 1 &&
-                  downloadItem.every(
-                    (item) =>
-                      item.downloadId &&
-                      item.downloadId === downloadItem[0].downloadId
-                  ) ? (
-                    <span className="ml-1">
-                      {intl.formatMessage(messages.seasonnumber, {
-                        seasonNumber: downloadItem[0].episode.seasonNumber,
-                      })}
-                    </span>
-                  ) : (
-                    <span className="ml-1">
-                      {intl.formatMessage(messages.seasonepisodenumber, {
-                        seasonNumber: downloadItem[0].episode.seasonNumber,
-                        episodeNumber: downloadItem[0].episode.episodeNumber,
-                      })}
-                    </span>
-                  ))}
+                {mediaType === 'tv' && enhancedStatus.episode && (
+                  <span className="ml-1">
+                    {enhancedStatus.episode.episodeNumber != null
+                      ? intl.formatMessage(messages.seasonepisodenumber, {
+                          seasonNumber: enhancedStatus.episode.seasonNumber,
+                          episodeNumber: enhancedStatus.episode.episodeNumber,
+                        })
+                      : intl.formatMessage(messages.seasonnumber, {
+                          seasonNumber: enhancedStatus.episode.seasonNumber,
+                        })}
+                  </span>
+                )}
                 <Spinner className="ml-1 h-3 w-3" />
               </div>
             </Badge>
@@ -230,7 +219,13 @@ const StatusBadge = ({
 
       case 'importing':
         return (
-          <Tooltip content={mediaLinkDescription}>
+          <Tooltip
+            content={inProgress ? tooltipContent : mediaLinkDescription}
+            className={`${inProgress && 'max-h-96 w-96 overflow-y-auto'}`}
+            tooltipConfig={{
+              ...(inProgress && { interactive: true, delayHide: 100 }),
+            }}
+          >
             <Badge badgeType="primary" href={mediaLink}>
               {labelText}
             </Badge>
@@ -257,7 +252,13 @@ const StatusBadge = ({
 
       case 'attention_needed':
         return (
-          <Tooltip content={mediaLinkDescription}>
+          <Tooltip
+            content={inProgress ? tooltipContent : mediaLinkDescription}
+            className={`${inProgress && 'max-h-96 w-96 overflow-y-auto'}`}
+            tooltipConfig={{
+              ...(inProgress && { interactive: true, delayHide: 100 }),
+            }}
+          >
             <Badge badgeType="danger" href={mediaLink}>
               {labelText}
             </Badge>
@@ -282,9 +283,7 @@ const StatusBadge = ({
       return (
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
-          className={`${
-            inProgress && 'max-h-96 w-96 overflow-y-auto'
-          }`}
+          className={`${inProgress && 'max-h-96 w-96 overflow-y-auto'}`}
           tooltipConfig={{
             ...(inProgress && { interactive: true, delayHide: 100 }),
           }}
@@ -296,7 +295,8 @@ const StatusBadge = ({
               inProgress && 'relative !bg-gray-700/80 !px-0 hover:!bg-gray-700'
             } overflow-hidden`}
           >
-            {inProgress && badgeDownloadProgress}
+            {inProgress &&
+              badgeDownloadProgress(calculateDownloadProgress(downloadItem[0]))}
             <div
               className={`relative z-20 flex items-center ${
                 inProgress && 'px-2'
@@ -347,9 +347,7 @@ const StatusBadge = ({
       return (
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
-          className={`${
-            inProgress && 'max-h-96 w-96 overflow-y-auto'
-          }`}
+          className={`${inProgress && 'max-h-96 w-96 overflow-y-auto'}`}
           tooltipConfig={{
             ...(inProgress && { interactive: true, delayHide: 100 }),
           }}
@@ -361,7 +359,8 @@ const StatusBadge = ({
               inProgress && 'relative !bg-gray-700/80 !px-0 hover:!bg-gray-700'
             } overflow-hidden`}
           >
-            {inProgress && badgeDownloadProgress}
+            {inProgress &&
+              badgeDownloadProgress(calculateDownloadProgress(downloadItem[0]))}
             <div
               className={`relative z-20 flex items-center ${
                 inProgress && 'px-2'
@@ -412,9 +411,7 @@ const StatusBadge = ({
       return (
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
-          className={`${
-            inProgress && 'max-h-96 w-96 overflow-y-auto'
-          }`}
+          className={`${inProgress && 'max-h-96 w-96 overflow-y-auto'}`}
           tooltipConfig={{
             ...(inProgress && { interactive: true, delayHide: 100 }),
           }}
@@ -426,7 +423,8 @@ const StatusBadge = ({
               inProgress && 'relative !bg-gray-700/80 !px-0 hover:!bg-gray-700'
             } overflow-hidden`}
           >
-            {inProgress && badgeDownloadProgress}
+            {inProgress &&
+              badgeDownloadProgress(calculateDownloadProgress(downloadItem[0]))}
             <div
               className={`relative z-20 flex items-center ${
                 inProgress && 'px-2'
@@ -499,9 +497,7 @@ const StatusBadge = ({
       return (
         <Tooltip
           content={inProgress ? tooltipContent : mediaLinkDescription}
-          className={`${
-            inProgress && 'max-h-96 w-96 overflow-y-auto'
-          }`}
+          className={`${inProgress && 'max-h-96 w-96 overflow-y-auto'}`}
           tooltipConfig={{
             ...(inProgress && { interactive: true, delayHide: 100 }),
           }}
@@ -513,7 +509,8 @@ const StatusBadge = ({
               inProgress && 'relative !bg-gray-700/80 !px-0 hover:!bg-gray-700'
             } overflow-hidden`}
           >
-            {inProgress && badgeDownloadProgress}
+            {inProgress &&
+              badgeDownloadProgress(calculateDownloadProgress(downloadItem[0]))}
             <div
               className={`relative z-20 flex items-center ${
                 inProgress && 'px-2'

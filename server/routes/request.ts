@@ -21,8 +21,8 @@ import type {
   MediaRequestBody,
   RequestResultsResponse,
 } from '@server/interfaces/api/requestInterfaces';
-import { computeEnhancedStatus } from '@server/lib/enhancedStatus';
 import downloadTracker from '@server/lib/downloadtracker';
+import { computeEnhancedStatus } from '@server/lib/enhancedStatus';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -284,7 +284,13 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
           : (r.media.recentlyDownloaded ?? false);
         return {
           ...r,
-          enhancedStatus: computeEnhancedStatus(r.status, mediaStatus, downloads, recentlyDownloaded),
+          enhancedStatus: computeEnhancedStatus(
+            r.status,
+            mediaStatus,
+            downloads,
+            recentlyDownloaded,
+            { requestedSeasons: r.seasons?.map((s) => s.seasonNumber) }
+          ),
         };
       });
 
@@ -478,7 +484,8 @@ requestRoutes.get('/:requestId', async (req, res, next) => {
           : (request.media.downloadStatus ?? []),
         request.is4k
           ? (request.media.recentlyDownloaded4k ?? false)
-          : (request.media.recentlyDownloaded ?? false)
+          : (request.media.recentlyDownloaded ?? false),
+        { requestedSeasons: request.seasons?.map((s) => s.seasonNumber) }
       ),
     });
   } catch (e) {

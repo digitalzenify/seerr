@@ -39,9 +39,9 @@ import { rescheduleJob } from 'node-schedule';
 import path from 'path';
 import semver from 'semver';
 import { URL } from 'url';
+import bazarrRoutes from './bazarr';
 import metadataRoutes from './metadata';
 import notificationRoutes from './notifications';
-import bazarrRoutes from './bazarr';
 import radarrRoutes from './radarr';
 import sonarrRoutes from './sonarr';
 

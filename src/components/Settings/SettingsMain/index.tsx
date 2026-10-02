@@ -321,12 +321,18 @@ const SettingsMain = () => {
                   </label>
                   <div className="form-input-area">
                     <div className="form-input-field">
-                      <Field as="select" id="mediaServerPrimary" name="mediaServerPrimary">
+                      <Field
+                        as="select"
+                        id="mediaServerPrimary"
+                        name="mediaServerPrimary"
+                      >
                         <option value="plex">
                           {intl.formatMessage(messages.mediaServerPrimaryPlex)}
                         </option>
                         <option value="jellyfin">
-                          {intl.formatMessage(messages.mediaServerPrimaryJellyfin)}
+                          {intl.formatMessage(
+                            messages.mediaServerPrimaryJellyfin
+                          )}
                         </option>
                       </Field>
                     </div>

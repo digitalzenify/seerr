@@ -2,12 +2,9 @@ import MediaSlider from '@app/components/MediaSlider';
 import defineMessages from '@app/utils/defineMessages';
 import { useIntl } from 'react-intl';
 
-const messages = defineMessages(
-  'components.Discover.BecauseYouWatchedSlider',
-  {
-    becauseyouwatched: 'Because You Watched',
-  }
-);
+const messages = defineMessages('components.Discover.BecauseYouWatchedSlider', {
+  becauseyouwatched: 'Because You Watched',
+});
 
 const BecauseYouWatchedSlider = () => {
   const intl = useIntl();

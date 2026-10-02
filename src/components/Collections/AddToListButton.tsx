@@ -1,12 +1,14 @@
 import { useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
-import {
-  BookmarkIcon,
-  CheckIcon,
-  PlusIcon,
-} from '@heroicons/react/24/outline';
+import { BookmarkIcon, CheckIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { BookmarkIcon as BookmarkSolidIcon } from '@heroicons/react/24/solid';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -59,9 +61,7 @@ const AddToListButton = ({
       const inLists = new Set<number>();
       for (const list of lists) {
         try {
-          const res = await fetch(
-            `/api/v1/user/${user.id}/lists/${list.id}`
-          );
+          const res = await fetch(`/api/v1/user/${user.id}/lists/${list.id}`);
           if (res.ok) {
             const data = await res.json();
             const found = data.items?.some(
@@ -105,9 +105,7 @@ const AddToListButton = ({
       try {
         if (addedToLists.has(listId)) {
           // Remove from list - need to find the item ID first
-          const res = await fetch(
-            `/api/v1/user/${user.id}/lists/${listId}`
-          );
+          const res = await fetch(`/api/v1/user/${user.id}/lists/${listId}`);
           if (res.ok) {
             const data = await res.json();
             const item = data.items?.find(
@@ -328,6 +326,7 @@ const AddToListButton = ({
                   }}
                   placeholder="List name..."
                   className="flex-1 rounded border-0 bg-gray-700 px-2 py-1 text-sm text-white placeholder-gray-400 focus:ring-1 focus:ring-indigo-500"
+                  // eslint-disable-next-line jsx-a11y/no-autofocus
                   autoFocus
                 />
                 <button

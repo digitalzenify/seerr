@@ -4,6 +4,9 @@ import { join } from 'path';
 // get all file content recursively
 async function getFiles(dir: string): Promise<string[]> {
   const dirents = await fs.readdir(dir, { withFileTypes: true });
+  // Sort entries so the traversal order (and therefore the extracted output)
+  // is deterministic across filesystems/OSes; readdir order is not stable.
+  dirents.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const files = await Promise.all(
     dirents.map((dirent) => {
       const res = join(dir, dirent.name);
@@ -82,9 +85,14 @@ async function processMessages(dir: string): Promise<string> {
     ) {
       const aLevel = a.namespace.match(/\./g)?.length || 0;
       const bLevel = b.namespace.match(/\./g)?.length || 0;
-      return bLevel - aLevel;
+      return (
+        bLevel - aLevel ||
+        (a.namespace < b.namespace ? -1 : a.namespace > b.namespace ? 1 : 0)
+      );
     }
-    return a.namespace.localeCompare(b.namespace);
+    // Byte-wise comparison instead of localeCompare: locale-dependent
+    // collation would make the output differ between environments.
+    return a.namespace < b.namespace ? -1 : a.namespace > b.namespace ? 1 : 0;
   });
 
   // add every messages from every namespace to an object

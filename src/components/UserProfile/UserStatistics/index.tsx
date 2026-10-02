@@ -50,9 +50,9 @@ const messages = defineMessages('components.UserProfile.UserStatistics', {
   genreEvolution: 'Genre Evolution Over Time',
   libraryUtilization: 'Library Exploration',
   libraryUtilizationDesc:
-    'Of {totalMovies} movies and {totalShows} TV shows ({totalEpisodes} episodes) on the server, you\'ve watched {watchedMovies} movies and {watchedShows} shows ({watchedEpisodes} episodes).',
-  libraryPlayful: 'There\'s a whole world out there.',
-  libraryExplored: 'You\'ve explored {percentage}% of the library.',
+    "Of {totalMovies} movies and {totalShows} TV shows ({totalEpisodes} episodes) on the server, you've watched {watchedMovies} movies and {watchedShows} shows ({watchedEpisodes} episodes).",
+  libraryPlayful: "There's a whole world out there.",
+  libraryExplored: "You've explored {percentage}% of the library.",
 });
 
 function formatWatchTime(minutes: number): string {
@@ -62,9 +62,7 @@ function formatWatchTime(minutes: number): string {
   if (hours < 24) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   const days = Math.floor(hours / 24);
   const remainingHours = hours % 24;
-  return remainingHours > 0
-    ? `${days}d ${remainingHours}h`
-    : `${days}d`;
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
 }
 
 function formatHour(hour: number): string {
@@ -144,16 +142,6 @@ const HorizontalBarChart = ({
   );
 };
 
-// Color palette for genre lines in the evolution chart
-const GENRE_COLORS = [
-  { line: 'bg-indigo-500', text: 'text-indigo-400', dot: 'bg-indigo-400' },
-  { line: 'bg-emerald-500', text: 'text-emerald-400', dot: 'bg-emerald-400' },
-  { line: 'bg-amber-500', text: 'text-amber-400', dot: 'bg-amber-400' },
-  { line: 'bg-rose-500', text: 'text-rose-400', dot: 'bg-rose-400' },
-  { line: 'bg-purple-500', text: 'text-purple-400', dot: 'bg-purple-400' },
-  { line: 'bg-cyan-500', text: 'text-cyan-400', dot: 'bg-cyan-400' },
-];
-
 const GenreEvolutionChart = ({
   genresByMonth,
 }: {
@@ -163,7 +151,7 @@ const GenreEvolutionChart = ({
     x: number;
     y: number;
     week: string;
-    genres: Array<{ name: string; count: number; colorIdx: number }>;
+    genres: { name: string; count: number; colorIdx: number }[];
   } | null>(null);
   const [showPercentage, setShowPercentage] = useState(false);
 
@@ -209,9 +197,7 @@ const GenreEvolutionChart = ({
   const periodDates = recentPeriods.map((p) => parsePeriodToDate(p.month));
   const minDate = periodDates.length > 0 ? periodDates[0].getTime() : 0;
   const maxDate =
-    periodDates.length > 0
-      ? periodDates[periodDates.length - 1].getTime()
-      : 0;
+    periodDates.length > 0 ? periodDates[periodDates.length - 1].getTime() : 0;
   const dateRange = maxDate - minDate || 1;
 
   // Build data matrix: for each genre (top 5 + Other), get count per period
@@ -257,8 +243,8 @@ const GenreEvolutionChart = ({
   const cumulativeBottom: number[] = genreData[0].map(() => 0);
 
   for (let gIdx = 0; gIdx < allGenreNames.length; gIdx++) {
-    const topLine: Array<{ x: number; y: number }> = [];
-    const bottomLine: Array<{ x: number; y: number }> = [];
+    const topLine: { x: number; y: number }[] = [];
+    const bottomLine: { x: number; y: number }[] = [];
 
     for (let pIdx = 0; pIdx < recentPeriods.length; pIdx++) {
       const x = xFromDate(periodDates[pIdx]);
@@ -293,9 +279,7 @@ const GenreEvolutionChart = ({
   // Y-axis tick values
   const yTicks = showPercentage
     ? [0, 25, 50, 75, 100]
-    : Array.from({ length: 5 }, (_, i) =>
-        Math.round((maxStackedVal / 4) * i)
-      );
+    : Array.from({ length: 5 }, (_, i) => Math.round((maxStackedVal / 4) * i));
 
   // X-axis labels: show ~6 evenly spaced labels
   const labelCount = Math.min(6, recentPeriods.length);
@@ -369,10 +353,7 @@ const GenreEvolutionChart = ({
       </div>
 
       {/* Chart area */}
-      <div
-        className="relative"
-        onMouseLeave={() => setTooltip(null)}
-      >
+      <div className="relative" onMouseLeave={() => setTooltip(null)}>
         <svg
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           className="w-full"
@@ -440,7 +421,9 @@ const GenreEvolutionChart = ({
           {recentPeriods.map((period, pIdx) => {
             const x = xFromDate(periodDates[pIdx]);
             const halfGap =
-              recentPeriods.length > 1 ? chartWidth / (recentPeriods.length - 1) / 2 : chartWidth / 2;
+              recentPeriods.length > 1
+                ? chartWidth / (recentPeriods.length - 1) / 2
+                : chartWidth / 2;
             return (
               <rect
                 key={pIdx}
@@ -453,18 +436,19 @@ const GenreEvolutionChart = ({
                   const svg = e.currentTarget.ownerSVGElement;
                   if (!svg) return;
                   const rect = svg.getBoundingClientRect();
-                  const tooltipX =
-                    ((x / svgWidth) * rect.width) + rect.left;
+                  const tooltipX = (x / svgWidth) * rect.width + rect.left;
                   const tooltipY = rect.top + padding.top;
                   setTooltip({
                     x: tooltipX,
                     y: tooltipY,
                     week: formatDate(periodDates[pIdx]),
-                    genres: allGenreNames.map((name, gIdx) => ({
-                      name,
-                      count: genreData[gIdx][pIdx],
-                      colorIdx: gIdx,
-                    })).filter((g) => g.count > 0),
+                    genres: allGenreNames
+                      .map((name, gIdx) => ({
+                        name,
+                        count: genreData[gIdx][pIdx],
+                        colorIdx: gIdx,
+                      }))
+                      .filter((g) => g.count > 0),
                   });
                 }}
                 onMouseLeave={() => setTooltip(null)}
@@ -508,8 +492,7 @@ const GenreEvolutionChart = ({
                 <div
                   className="h-2 w-2 rounded-full"
                   style={{
-                    backgroundColor:
-                      GENRE_HEX[g.colorIdx % GENRE_HEX.length],
+                    backgroundColor: GENRE_HEX[g.colorIdx % GENRE_HEX.length],
                   }}
                 />
                 <span className="text-gray-400">{g.name}:</span>
@@ -582,7 +565,11 @@ const LibraryUtilizationCard = ({
       <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
         {/* Circular progress */}
         <div className="relative">
-          <CircularProgress percentage={utilization.overallPercentage} size={120} strokeWidth={10} />
+          <CircularProgress
+            percentage={utilization.overallPercentage}
+            size={120}
+            strokeWidth={10}
+          />
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-2xl font-bold text-white">
               {utilization.overallPercentage}%
@@ -819,8 +806,7 @@ const UserStatistics = () => {
           </section>
 
           {/* Time-Based Insights */}
-          {(stats?.preferredWatchingHour != null ||
-            stats?.mostActiveDay) && (
+          {(stats?.preferredWatchingHour != null || stats?.mostActiveDay) && (
             <section>
               <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
                 <ClockIcon className="h-5 w-5 text-cyan-400" />
@@ -852,9 +838,7 @@ const UserStatistics = () => {
                 <ChartBarIcon className="h-5 w-5 text-purple-400" />
                 {intl.formatMessage(messages.genreEvolution)}
               </h2>
-              <GenreEvolutionChart
-                genresByMonth={stats?.genresByMonth ?? []}
-              />
+              <GenreEvolutionChart genresByMonth={stats?.genresByMonth ?? []} />
             </section>
           )}
 
