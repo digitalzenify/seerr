@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { beforeEach, describe, it, mock } from 'node:test';
+import { beforeEach, describe, it } from 'node:test';
+
+import PlexAPI from '@server/api/plexapi';
 
 // ---------------------------------------------------------------------------
-// Mock @server/lib/settings so PlexAPI constructor doesn't need a real config
+// Shared fixture — passed explicitly to every PlexAPI constructor call
 // ---------------------------------------------------------------------------
 
 const mockPlexSettings = {
@@ -13,19 +15,6 @@ const mockPlexSettings = {
   libraries: [],
   authToken: 'settings-token',
 };
-
-const mockGetSettings = () => ({
-  plex: mockPlexSettings,
-  clientId: 'test-client-id',
-  save: async () => {},
-});
-
-await mock.module('@server/lib/settings', {
-  namedExports: { getSettings: mockGetSettings },
-});
-
-// Import PlexAPI AFTER mocking settings
-const { default: PlexAPI } = await import('@server/api/plexapi');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -44,19 +33,18 @@ function makeClient(tokenOverride?: string | null, ipOverride?: string) {
 
 function patchAxios(client: InstanceType<typeof PlexAPI>, data: unknown) {
   (client as any).axios = {
-    get: async (_url: string, _config?: unknown) => ({ data }),
+    get: async () => ({ data }),
   };
 }
 
-function patchAxiosError(
-  client: InstanceType<typeof PlexAPI>,
-  status: number
-) {
+function patchAxiosError(client: InstanceType<typeof PlexAPI>, status: number) {
   const err = Object.assign(new Error(`HTTP ${status}`), {
     response: { status },
   });
   (client as any).axios = {
-    get: async () => { throw err; },
+    get: async () => {
+      throw err;
+    },
   };
 }
 
@@ -123,8 +111,18 @@ describe('PlexAPI', () => {
       patchAxios(client, {
         MediaContainer: {
           Directory: [
-            { type: 'movie', key: '1', title: 'Movies', agent: 'tv.plex.agents.movie' },
-            { type: 'show', key: '2', title: 'TV', agent: 'tv.plex.agents.series' },
+            {
+              type: 'movie',
+              key: '1',
+              title: 'Movies',
+              agent: 'tv.plex.agents.movie',
+            },
+            {
+              type: 'show',
+              key: '2',
+              title: 'TV',
+              agent: 'tv.plex.agents.series',
+            },
           ],
         },
       });
@@ -142,7 +140,15 @@ describe('PlexAPI', () => {
         MediaContainer: {
           totalSize: 42,
           Metadata: [
-            { ratingKey: '1', title: 'Film', type: 'movie', guid: 'g1', addedAt: 0, updatedAt: 0, Media: [] },
+            {
+              ratingKey: '1',
+              title: 'Film',
+              type: 'movie',
+              guid: 'g1',
+              addedAt: 0,
+              updatedAt: 0,
+              Media: [],
+            },
           ],
         },
       });
@@ -195,7 +201,17 @@ describe('PlexAPI', () => {
       patchAxios(client, {
         MediaContainer: {
           size: 1,
-          Metadata: [{ ratingKey: 'p1', title: 'My Playlist', type: 'playlist', leafCount: 5, duration: 3600, addedAt: 0, updatedAt: 0 }],
+          Metadata: [
+            {
+              ratingKey: 'p1',
+              title: 'My Playlist',
+              type: 'playlist',
+              leafCount: 5,
+              duration: 3600,
+              addedAt: 0,
+              updatedAt: 0,
+            },
+          ],
         },
       });
       const lists = await client.getPlaylists();
@@ -209,7 +225,15 @@ describe('PlexAPI', () => {
       patchAxios(client, {
         MediaContainer: {
           size: 1,
-          Hub: [{ key: '/hubs/home', title: 'Recently Added', type: 'mixed', hubKey: '/hubs/home', size: 3 }],
+          Hub: [
+            {
+              key: '/hubs/home',
+              title: 'Recently Added',
+              type: 'mixed',
+              hubKey: '/hubs/home',
+              size: 3,
+            },
+          ],
         },
       });
       const hubs = await client.getHubs();
@@ -261,7 +285,10 @@ describe('PlexAPI', () => {
           }
         }
       }
-      assert.ok(circuitOpened, 'Circuit breaker should open after repeated 5xx');
+      assert.ok(
+        circuitOpened,
+        'Circuit breaker should open after repeated 5xx'
+      );
     });
 
     it('does not retry on 4xx errors', async () => {

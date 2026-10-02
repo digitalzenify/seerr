@@ -6,7 +6,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { before, describe, it, mock } from 'node:test';
+import { before, describe, it } from 'node:test';
 
 import { getSettings } from '@server/lib/settings';
 import { setupTestDb } from '@server/test/db';
@@ -19,32 +19,41 @@ import request from 'supertest';
 // ---------------------------------------------------------------------------
 
 let mockPlexConnected = true;
-let mockMachineId = 'machine-123';
-let mockLibraries: { type: string; key: string; title: string; agent: string }[] = [
+const mockMachineId = 'machine-123';
+let mockLibraries: {
+  type: string;
+  key: string;
+  title: string;
+  agent: string;
+}[] = [
   { type: 'movie', key: '1', title: 'Movies', agent: 'tv.plex.agents.movie' },
 ];
 
-await mock.module('@server/api/plexapi', {
-  defaultExport: class MockPlexAPI {
-    constructor() {}
-    getStatus = async () => ({
-      MediaContainer: { machineIdentifier: mockMachineId, friendlyName: 'Test' },
-    });
-    getIdentity = async () => ({
-      MediaContainer: {
-        machineIdentifier: mockMachineId,
-        friendlyName: 'Test',
-        version: '1.0',
-        platform: 'Linux',
-        platformVersion: '5.0',
-      },
-    });
-    getLibraries = async () => {
-      if (!mockPlexConnected) throw new Error('Connection refused');
-      return mockLibraries;
-    };
-  },
-});
+// Test double for @server/api/plexapi — injected directly into the inline
+// route below so the tests never hit a real Plex server.
+class MockPlexAPI {
+  readonly options?: Record<string, unknown>;
+
+  constructor(options?: Record<string, unknown>) {
+    this.options = options;
+  }
+  getStatus = async () => ({
+    MediaContainer: { machineIdentifier: mockMachineId, friendlyName: 'Test' },
+  });
+  getIdentity = async () => ({
+    MediaContainer: {
+      machineIdentifier: mockMachineId,
+      friendlyName: 'Test',
+      version: '1.0',
+      platform: 'Linux',
+      platformVersion: '5.0',
+    },
+  });
+  getLibraries = async () => {
+    if (!mockPlexConnected) throw new Error('Connection refused');
+    return mockLibraries;
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Minimal express app – no auth middleware so we can test the route logic
@@ -78,8 +87,7 @@ async function createTestApp(): Promise<Express> {
     }
 
     try {
-      const { default: PlexAPI } = await import('@server/api/plexapi');
-      const client = new PlexAPI({
+      const client = new MockPlexAPI({
         plexToken: plex.authToken,
         plexSettings: plex as any,
         timeout: 5_000,

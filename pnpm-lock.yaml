@@ -240,6 +240,9 @@ importers:
       winston-daily-rotate-file:
         specifier: 4.7.1
         version: 4.7.1(winston@3.19.0)
+      ws:
+        specifier: 8.18.2
+        version: 8.18.2
       xml2js:
         specifier: 0.5.0
         version: 0.5.0
@@ -340,6 +343,9 @@ importers:
       '@types/web-push':
         specifier: 3.6.4
         version: 3.6.4
+      '@types/ws':
+        specifier: 8.5.14
+        version: 8.5.14
       '@types/xml2js':
         specifier: 0.4.14
         version: 0.4.14
@@ -3311,6 +3317,9 @@ packages:
   '@types/wink-jaro-distance@2.0.2':
     resolution: {integrity: sha512-Q79orp7qA/g/uLdFmqd5MtEa0ZfJW5X1WXikAu8IVHt24IrHWrcTNYNdPpLK5mwVg34C6FQnrv/DMtcUhjE/zA==}
 
+  '@types/ws@8.5.14':
+    resolution: {integrity: sha512-bd/YFLW+URhBzMXurx7lWByOu+xzU9+kb3RboOteXYDfW+tr+JZa99OyNmPINEGB/ahzKrEuc8rcv4gnpJmxTw==}
+
   '@types/xml2js@0.4.14':
     resolution: {integrity: sha512-4YnrRemBShWRO2QjvUin8ESA41rH+9nQGLUGZV/1IDhi3SL9OhdpNC/MrulTWuptXKwhx/aDxE7toV0f/ypIXQ==}
 
@@ -3393,6 +3402,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@unicode/unicode-17.0.0@1.6.16':
     resolution: {integrity: sha512-advq5p36zZ+PDRUpDkWcHHR++R19kx0LYB5iG3bj0KB8mYVKg0ywS996e2bXeXxDb8XdOF7KTivcx7VkYie1pg==}
@@ -9219,6 +9229,18 @@ packages:
       utf-8-validate:
         optional: true
 
+  ws@8.18.2:
+    resolution: {integrity: sha512-DMricUmwGZUVr++AEAe2uiVM7UoO9MAVZMDu05UQOaUII0lp+zOzLLU4Xqh/JvTqklB1T4uELaaPBKyjE1r4fQ==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   xml2js@0.5.0:
     resolution: {integrity: sha512-drPFnkQJik/O+uPKpqSgr22mpuFHqKdbS835iAQrUC73L2F5WkboIRd63ai/2Yg6I1jzifPFKH2NTK+cfglkIA==}
     engines: {node: '>=4.0.0'}
@@ -13215,6 +13237,10 @@ snapshots:
   '@types/webxr@0.5.24': {}
 
   '@types/wink-jaro-distance@2.0.2': {}
+
+  '@types/ws@8.5.14':
+    dependencies:
+      '@types/node': 22.10.5
 
   '@types/xml2js@0.4.14':
     dependencies:
@@ -17829,7 +17855,7 @@ snapshots:
 
   node-dir@0.1.17:
     dependencies:
-      minimatch: 3.1.2
+      minimatch: 3.1.5
 
   node-fetch@2.7.0(encoding@0.1.13):
     dependencies:
@@ -19772,7 +19798,7 @@ snapshots:
     dependencies:
       '@istanbuljs/schema': 0.1.3
       glob: 7.2.3
-      minimatch: 3.1.2
+      minimatch: 3.1.5
     optional: true
 
   text-extensions@1.9.0: {}
@@ -20445,6 +20471,8 @@ snapshots:
       async-limiter: 1.0.1
 
   ws@7.5.10: {}
+
+  ws@8.18.2: {}
 
   xml2js@0.5.0:
     dependencies:

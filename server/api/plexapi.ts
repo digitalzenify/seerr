@@ -189,16 +189,12 @@ interface PlexPrefsResponse {
 }
 
 /** Simple circuit breaker state shared per PlexAPI base URL */
-const circuitState = new Map<
-  string,
-  { failures: number; openUntil: number }
->();
+const circuitState = new Map<string, { failures: number; openUntil: number }>();
 
 const CIRCUIT_FAILURE_THRESHOLD = 5;
 const CIRCUIT_OPEN_MS = 30_000;
 
 class PlexAPI extends ExternalAPI {
-  private baseUrl: string;
   private token: string;
 
   constructor({
@@ -217,8 +213,7 @@ class PlexAPI extends ExternalAPI {
     const baseUrl = `${protocol}://${settingsPlex.ip}:${settingsPlex.port}`;
 
     // Prefer the explicitly supplied token, fall back to settings authToken
-    const resolvedToken =
-      plexToken ?? settingsPlex.authToken ?? '';
+    const resolvedToken = plexToken ?? settingsPlex.authToken ?? '';
 
     super(
       baseUrl,
@@ -241,10 +236,7 @@ class PlexAPI extends ExternalAPI {
   }
 
   /** Exponential backoff with jitter, up to maxRetries attempts on 5xx */
-  private async withRetry<T>(
-    fn: () => Promise<T>,
-    maxRetries = 3
-  ): Promise<T> {
+  private async withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
     const state = circuitState.get(this.baseUrl) ?? {
       failures: 0,
       openUntil: 0,
@@ -279,7 +271,10 @@ class PlexAPI extends ExternalAPI {
           }
           circuitState.set(this.baseUrl, state);
           if (attempt < maxRetries) {
-            const delay = Math.min(1000 * 2 ** attempt + Math.random() * 200, 10_000);
+            const delay = Math.min(
+              1000 * 2 ** attempt + Math.random() * 200,
+              10_000
+            );
             await new Promise((r) => setTimeout(r, delay));
             continue;
           }
@@ -447,8 +442,7 @@ class PlexAPI extends ExternalAPI {
 
   /** GET /:/prefs — server preferences */
   public async getPrefs(): Promise<PlexPrefs> {
-    const response =
-      await this.getWithRetry<PlexPrefsResponse>('/:/prefs');
+    const response = await this.getWithRetry<PlexPrefsResponse>('/:/prefs');
     const prefs: PlexPrefs = {};
     for (const setting of response.MediaContainer.Setting ?? []) {
       prefs[setting.id] = setting.value;
