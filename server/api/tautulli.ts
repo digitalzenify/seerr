@@ -98,6 +98,22 @@ interface TautulliWatchUsersResponse {
   };
 }
 
+interface TautulliMetadata {
+  media_type?: string;
+  title?: string;
+  guid?: string;
+  guids?: string[];
+  rating_key?: number;
+}
+
+interface TautulliMetadataResponse {
+  response: {
+    result: string;
+    message?: string;
+    data: TautulliMetadata;
+  };
+}
+
 interface TautulliInfo {
   tautulli_install_type: string;
   tautulli_version: string;
@@ -207,6 +223,25 @@ class TautulliAPI {
         `[Tautulli] Failed to fetch media watch users: ${e.message}`,
         { cause: e }
       );
+    }
+  }
+
+  public async getMetadata(ratingKey: string): Promise<TautulliMetadata> {
+    try {
+      return (
+        await this.axios.get<TautulliMetadataResponse>('/api/v2', {
+          params: { cmd: 'get_metadata', rating_key: ratingKey },
+        })
+      ).data.response.data;
+    } catch (e) {
+      logger.error('Something went wrong fetching metadata from Tautulli', {
+        label: 'Tautulli API',
+        errorMessage: e.message,
+        ratingKey,
+      });
+      throw new Error(`[Tautulli] Failed to fetch metadata: ${e.message}`, {
+        cause: e,
+      });
     }
   }
 
