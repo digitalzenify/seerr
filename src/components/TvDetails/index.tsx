@@ -29,13 +29,19 @@ import Season from '@app/components/TvDetails/Season';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
+import useToasts from '@app/hooks/useToasts';
 import { Permission, UserType, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import ErrorPage from '@app/pages/_error';
 import { sortCrewPriority } from '@app/utils/creditHelpers';
 import defineMessages from '@app/utils/defineMessages';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
-import { Disclosure, Transition } from '@headlessui/react';
+import {
+  Disclosure,
+  DisclosureButton,
+  DisclosurePanel,
+  Transition,
+} from '@headlessui/react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import {
   ArrowRightCircleIcon,
@@ -64,9 +70,8 @@ import { countries } from 'country-flag-icons';
 import 'country-flag-icons/3x2/flags.css';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
 const messages = defineMessages('components.TvDetails', {
@@ -120,7 +125,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
   const intl = useIntl();
   const { locale } = useLocale();
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [showManager, setShowManager] = useState(router.query.manage == '1');
+  const [showManager, setShowManager] = useState(false);
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [toggleWatchlist, setToggleWatchlist] = useState<boolean>(
@@ -175,8 +180,14 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
   );
 
   useEffect(() => {
-    setShowManager(router.query.manage == '1');
-  }, [router.query.manage]);
+    if (router.query.manage === '1') {
+      setShowManager(true);
+      router.replace({
+        pathname: router.pathname,
+        query: { tvId: router.query.tvId },
+      });
+    }
+  }, [router, router.query.manage]);
 
   const closeBlocklistModal = useCallback(
     () => setShowBlocklistModal(false),
@@ -285,12 +296,12 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
           </Link>
         ))
         .reduce((prev, curr) => (
-          <>
+          <Fragment key={`${prev.key}-${curr.key}`}>
             {intl.formatMessage(globalMessages.delimitedlist, {
               a: prev,
               b: curr,
             })}
-          </>
+          </Fragment>
         ))
     );
   }
@@ -324,19 +335,26 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
     return [...requestedSeasons, ...availableSeasons];
   };
 
-  const showHasSpecials = data.seasons.some(
-    (season) =>
-      season.seasonNumber === 0 &&
-      settings.currentSettings.enableSpecialEpisodes
-  );
+  // Mirrors the season list the request modal offers, so the two agree.
+  const requestableSeasons = data.seasons
+    .filter(
+      (season) =>
+        season.episodeCount !== 0 &&
+        (settings.currentSettings.enableSpecialEpisodes ||
+          season.seasonNumber !== 0)
+    )
+    .map((season) => season.seasonNumber);
 
-  const isComplete =
-    (showHasSpecials ? seasonCount + 1 : seasonCount) <=
-    getAllRequestedSeasons(false).length;
+  const isSeasonSetComplete = (is4k: boolean) => {
+    const requested = getAllRequestedSeasons(is4k);
+    return requestableSeasons.every((seasonNumber) =>
+      requested.includes(seasonNumber)
+    );
+  };
 
-  const is4kComplete =
-    (showHasSpecials ? seasonCount + 1 : seasonCount) <=
-    getAllRequestedSeasons(true).length;
+  const isComplete = isSeasonSetComplete(false);
+
+  const is4kComplete = isSeasonSetComplete(true);
 
   // Compute enhanced status for the status badges from the current request data
   const activeRequest = data.mediaInfo?.requests?.find(
@@ -575,7 +593,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
         mediaType="tv"
         onClose={() => {
           setShowManager(false);
-          router.push({
+          router.replace({
             pathname: router.pathname,
             query: { tvId: router.query.tvId },
           });
@@ -653,11 +671,11 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
               seriesAttributes
                 .map((t, k) => <span key={k}>{t}</span>)
                 .reduce((prev, curr) => (
-                  <>
+                  <Fragment key={`${prev.key}-${curr.key}`}>
                     {prev}
                     <span>|</span>
                     {curr}
-                  </>
+                  </Fragment>
                 ))}
           </span>
         </div>
@@ -907,7 +925,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                   <Disclosure key={`season-discoslure-${season.seasonNumber}`}>
                     {({ open }) => (
                       <>
-                        <Disclosure.Button
+                        <DisclosureButton
                           className={`mt-2 flex w-full items-center justify-between space-x-2 border-gray-700 bg-gray-800 px-4 py-2 text-gray-200 ${
                             open
                               ? 'rounded-t-md border-l border-r border-t'
@@ -1121,8 +1139,9 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                               open ? 'rotate-180' : ''
                             } h-6 w-6 text-gray-500`}
                           />
-                        </Disclosure.Button>
+                        </DisclosureButton>
                         <Transition
+                          as="div"
                           show={open}
                           enter="transition-opacity duration-100 ease-out"
                           enterFrom="opacity-0"
@@ -1133,7 +1152,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                           // Not sure why this transition is adding a margin without this here
                           style={{ margin: '0px' }}
                         >
-                          <Disclosure.Panel className="w-full rounded-b-md border-b border-l border-r border-gray-700 px-4 pb-2">
+                          <DisclosurePanel className="w-full rounded-b-md border-b border-l border-r border-gray-700 px-4 pb-2">
                             <Season
                               tvId={data.id}
                               seasonNumber={season.seasonNumber}
@@ -1148,7 +1167,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                                   MediaStatus.PARTIALLY_AVAILABLE
                               }
                             />
-                          </Disclosure.Panel>
+                          </DisclosurePanel>
                         </Transition>
                       </>
                     )}
@@ -1340,12 +1359,12 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                       </Link>
                     ))
                     .reduce((prev, curr) => (
-                      <>
+                      <Fragment key={`${prev.key}-${curr.key}`}>
                         {intl.formatMessage(globalMessages.delimitedlist, {
                           a: prev,
                           b: curr,
                         })}
-                      </>
+                      </Fragment>
                     ))}
                 </span>
               </div>
@@ -1356,7 +1375,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                 <span className="media-fact-value flex flex-row flex-wrap gap-5">
                   {streamingProviders.map((p) => {
                     return (
-                      <Tooltip content={p.name}>
+                      <Tooltip content={p.name} key={`tooltip-${p.id}`}>
                         <span
                           className="opacity-50 transition duration-300 hover:opacity-100"
                           key={`provider-${p.id}`}

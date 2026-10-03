@@ -69,18 +69,28 @@ const MediaSlider = ({
   if (settings.currentSettings.hideAvailable) {
     titles = titles.filter(
       (i) =>
-        (i.mediaType === 'movie' || i.mediaType === 'tv') &&
-        i.mediaInfo?.status !== MediaStatus.AVAILABLE &&
-        i.mediaInfo?.status !== MediaStatus.PARTIALLY_AVAILABLE
+        !(i.mediaType === 'movie' || i.mediaType === 'tv') ||
+        (i.mediaInfo?.status !== MediaStatus.AVAILABLE &&
+          i.mediaInfo?.status !== MediaStatus.PARTIALLY_AVAILABLE)
     );
   }
 
   if (settings.currentSettings.hideBlocklisted) {
     titles = titles.filter(
       (i) =>
-        (i.mediaType === 'movie' || i.mediaType === 'tv') &&
+        !(i.mediaType === 'movie' || i.mediaType === 'tv') ||
         i.mediaInfo?.status !== MediaStatus.BLOCKLISTED
     );
+  }
+
+  if (settings.currentSettings.hideRequested) {
+    titles = titles.filter((i) => {
+      if (i.mediaType !== 'movie' && i.mediaType !== 'tv') {
+        return true;
+      }
+
+      return !i.mediaInfo?.hasActiveRequest;
+    });
   }
 
   // Collect TMDB IDs for rating batch fetch (must be before any conditional returns to satisfy Rules of Hooks)
@@ -116,7 +126,6 @@ const MediaSlider = ({
   );
 
   const discoverRatings = { ...movieRatings, ...tvRatings };
-
   useEffect(() => {
     if (
       titles.length < 24 &&
