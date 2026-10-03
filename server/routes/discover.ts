@@ -1,7 +1,7 @@
-import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
 import IMDBApi from '@server/api/rating/imdbapi';
 import RottenTomatoes from '@server/api/rating/rottentomatoes';
+import TautulliAPI from '@server/api/tautulli';
 import TheMovieDb, {
   MovieSortOptionsIterable,
   TvSortOptionsIterable,
@@ -1011,16 +1011,12 @@ discoverRoutes.get<Record<string, unknown>, WatchlistResponse>(
 );
 
 /**
- * Helper: Get a Jellyfin API client authenticated as the admin user.
+ * Helper: Get a Tautulli API client from settings, or undefined when not configured.
  */
-function getJellyfinClient(): JellyfinAPI | undefined {
-  const settings = getSettings();
-  const jf = settings.jellyfin;
-  if (!jf.ip || !jf.apiKey) return undefined;
-  const protocol = jf.useSsl ? 'https' : 'http';
-  const urlBase = jf.urlBase ? `/${jf.urlBase.replace(/^\//, '')}` : '';
-  const baseUrl = `${protocol}://${jf.ip}:${jf.port}${urlBase}`;
-  return new JellyfinAPI(baseUrl, jf.apiKey);
+function getTautulliClient(): TautulliAPI | undefined {
+  const tautulli = getSettings().tautulli;
+  if (!tautulli.hostname || !tautulli.apiKey) return undefined;
+  return new TautulliAPI(tautulli);
 }
 
 interface BecauseYouWatchedCacheEntry {
@@ -1044,7 +1040,7 @@ interface BecauseYouWatchedCacheEntry {
 
 /**
  * GET /discover/because-you-watched
- * Returns personalized recommendations based on the user's Jellyfin watch history.
+ * Returns personalized recommendations based on the user's Plex watch history (via Tautulli).
  * Per-user caching with 48h TTL.
  */
 discoverRoutes.get(
@@ -1053,8 +1049,8 @@ discoverRoutes.get(
   async (req, res, next) => {
     try {
       const user = req.user;
-      if (!user?.jellyfinUserId) {
-        // Fallback: return trending movies for users without Jellyfin history
+      if (!user?.plexId) {
+        // Fallback: return trending movies for users without watch history
         const tmdb = createTmdbWithRegionLanguage(user);
         const trending = await tmdb.getMovieTrending({ page: 1 });
         const media = await Media.getRelatedMedia(
@@ -1124,9 +1120,9 @@ discoverRoutes.get(
         });
       }
 
-      // Fetch watch history from Jellyfin
-      const jf = getJellyfinClient();
-      if (!jf) {
+      // Fetch watch history from Tautulli (Plex)
+      const tautulli = getTautulliClient();
+      if (!tautulli) {
         return res.status(200).json({
           page: 1,
           totalPages: 0,
@@ -1135,10 +1131,9 @@ discoverRoutes.get(
         });
       }
 
-      jf.setUserId(user.jellyfinUserId);
-      const recentlyPlayed = await jf.getRecentlyPlayed(15);
+      const history = await tautulli.getUserWatchHistory(user);
 
-      if (!recentlyPlayed.length) {
+      if (!history.length) {
         // No watch history - return trending movies as fallback
         const tmdb = createTmdbWithRegionLanguage(user);
         const trending = await tmdb.getMovieTrending({ page: 1 });
@@ -1164,55 +1159,42 @@ discoverRoutes.get(
         });
       }
 
-      // Map Jellyfin items to TMDB IDs, dedup series by SeriesId
-      const seenSeries = new Set<string>();
+      // Map Tautulli history records to TMDB IDs via Plex metadata guids
       const watchedTmdbItems: {
         tmdbId: number;
         type: 'movie' | 'tv';
       }[] = [];
 
-      for (const item of recentlyPlayed) {
-        if (item.Type === 'Episode') {
-          // For episodes, use the series TMDB ID
-          const seriesId = item.SeriesId;
-          if (seriesId && !seenSeries.has(seriesId)) {
-            seenSeries.add(seriesId);
-            // Need to fetch the series to get TMDB provider ID
-            const tmdbId =
-              item.ProviderIds?.Tmdb || item.ProviderIds?.TheMovieDb;
-            if (tmdbId) {
-              watchedTmdbItems.push({
-                tmdbId: Number(tmdbId),
-                type: 'tv',
-              });
-            } else if (seriesId) {
-              // Try to get the series data to find TMDB ID
-              try {
-                const seriesData = await jf.getItemData(seriesId);
-                const seriesTmdbId =
-                  seriesData?.ProviderIds?.Tmdb ??
-                  seriesData?.ProviderIds?.TheMovieDb;
-                if (seriesTmdbId) {
-                  watchedTmdbItems.push({
-                    tmdbId: Number(seriesTmdbId),
-                    type: 'tv',
-                  });
-                }
-              } catch {
-                // Skip if can't fetch series data
-              }
+      await Promise.allSettled(
+        history.slice(0, 15).map(async (record) => {
+          const isMovie = record.media_type === 'movie';
+          const ratingKey = isMovie
+            ? record.rating_key
+            : record.grandparent_rating_key;
+
+          if (!ratingKey) {
+            return;
+          }
+
+          try {
+            const metadata = await tautulli.getMetadata(String(ratingKey));
+            const tmdbGuid = metadata.guids?.find((guid) =>
+              guid.startsWith('tmdb://')
+            );
+
+            if (!tmdbGuid) {
+              return;
             }
-          }
-        } else if (item.Type === 'Movie') {
-          const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TheMovieDb;
-          if (tmdbId) {
+
             watchedTmdbItems.push({
-              tmdbId: Number(tmdbId),
-              type: 'movie',
+              tmdbId: Number(tmdbGuid.replace('tmdb://', '')),
+              type: isMovie ? 'movie' : 'tv',
             });
+          } catch {
+            // Skip items whose metadata cannot be fetched
           }
-        }
-      }
+        })
+      );
 
       // Fetch TMDB recommendations for each watched item
       const tmdb = createTmdbWithRegionLanguage(user);
