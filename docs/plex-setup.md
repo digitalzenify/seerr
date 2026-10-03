@@ -190,6 +190,5 @@ configured as the primary server.
 
 ## See Also
 
-- [README — Plex Support section](../README.md#plex-support)
+- The repository README covers Plex support and the `MEDIA_SERVER_PRIMARY` setting
 - [Plex documentation](https://support.plex.tv)
-- [Settings → General — MEDIA_SERVER_PRIMARY](../README.md#media_server_primary-feature-flag)
