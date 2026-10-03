@@ -6,6 +6,20 @@ const TRANSITIONAL_STATUSES = new Set([
   MediaStatus.PROCESSING,
   MediaStatus.PENDING,
 ]);
+export const getRequestDownloadStatus = (
+  downloadStatus: DownloadingItem[] | undefined,
+  seasonNumbers: number[]
+): DownloadingItem[] => {
+  const items = downloadStatus ?? [];
+
+  if (!seasonNumbers.length) {
+    return items;
+  }
+
+  return items.filter(
+    (item) => item.episode && seasonNumbers.includes(item.episode.seasonNumber)
+  );
+};
 
 export const refreshIntervalHelper = (
   downloadItem: {

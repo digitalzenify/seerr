@@ -4,18 +4,19 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
 import BecauseYouWatchedSlider from '@app/components/Discover/BecauseYouWatchedSlider';
-import { sliderTitles } from '@app/components/Discover/constants';
 import CreateSlider from '@app/components/Discover/CreateSlider';
 import DiscoverSliderEdit from '@app/components/Discover/DiscoverSliderEdit';
 import MovieGenreSlider from '@app/components/Discover/MovieGenreSlider';
 import NetworkSlider from '@app/components/Discover/NetworkSlider';
 import PlexWatchlistSlider from '@app/components/Discover/PlexWatchlistSlider';
-import RecentlyAddedSlider from '@app/components/Discover/RecentlyAddedSlider';
 import RecentRequestsSlider from '@app/components/Discover/RecentRequestsSlider';
+import RecentlyAddedSlider from '@app/components/Discover/RecentlyAddedSlider';
 import StudioSlider from '@app/components/Discover/StudioSlider';
 import TvGenreSlider from '@app/components/Discover/TvGenreSlider';
+import { sliderTitles } from '@app/components/Discover/constants';
 import MediaSlider from '@app/components/MediaSlider';
 import { encodeURIExtraParams } from '@app/hooks/useDiscover';
+import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -32,7 +33,6 @@ import type DiscoverSlider from '@server/entity/DiscoverSlider';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
 const messages = defineMessages('components.Discover', {
@@ -148,6 +148,7 @@ const Discover = () => {
             </div>
           )}
           <Transition
+            as="div"
             show={!isEditing}
             enter="transition-opacity duration-300"
             enterFrom="opacity-0"
@@ -166,6 +167,7 @@ const Discover = () => {
             </button>
           </Transition>
           <Transition
+            as="div"
             show={isEditing}
             enter="transition duration-300"
             enterFrom="opacity-0 translate-y-6"

@@ -1,6 +1,7 @@
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import useClickOutside from '@app/hooks/useClickOutside';
 import { useLockBodyScroll } from '@app/hooks/useLockBodyScroll';
+import { useToasts } from '@app/hooks/useToasts';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
 import {
@@ -11,7 +12,6 @@ import {
 import { Fragment, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useIntl } from 'react-intl';
-import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
 const messages = defineMessages('components.SubtitleModal', {

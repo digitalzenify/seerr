@@ -12,6 +12,7 @@ import RequestModal from '@app/components/RequestModal';
 import ErrorCard from '@app/components/TitleCard/ErrorCard';
 import Placeholder from '@app/components/TitleCard/Placeholder';
 import { useIsTouch } from '@app/hooks/useIsTouch';
+import useToasts from '@app/hooks/useToasts';
 import { Permission, UserType, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -31,7 +32,6 @@ import axios from 'axios';
 import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { useToasts } from 'react-toast-notifications';
 import { mutate } from 'swr';
 
 interface TitleCardProps {
@@ -186,12 +186,16 @@ const TitleCard = ({
 
     if (topNode) {
       try {
-        await axios.post('/api/v1/blocklist', {
-          tmdbId: id,
-          mediaType,
-          title,
-          user: user?.id,
-        });
+        if (mediaType === 'collection') {
+          await axios.post(`/api/v1/blocklist/collection/${id}`);
+        } else {
+          await axios.post('/api/v1/blocklist', {
+            tmdbId: id,
+            mediaType,
+            title,
+            user: user?.id,
+          });
+        }
         addToast(
           <span>
             {intl.formatMessage(globalMessages.blocklistSuccess, {
@@ -202,6 +206,9 @@ const TitleCard = ({
           { appearance: 'success', autoDismiss: true }
         );
         setCurrentStatus(MediaStatus.BLOCKLISTED);
+        if (mutateParent) {
+          mutateParent();
+        }
       } catch (e) {
         if (e?.response?.status === 412) {
           addToast(
@@ -236,22 +243,57 @@ const TitleCard = ({
     const topNode = cardRef.current;
 
     if (topNode) {
-      const res = await axios.delete(
-        `/api/v1/blocklist/${id}?mediaType=${mediaType}`
-      );
+      try {
+        if (mediaType === 'collection') {
+          const res = await axios.delete(`/api/v1/blocklist/collection/${id}`);
 
-      if (res.status === 204) {
-        addToast(
-          <span>
-            {intl.formatMessage(globalMessages.removeFromBlocklistSuccess, {
-              title,
-              strong: (msg: React.ReactNode) => <strong>{msg}</strong>,
-            })}
-          </span>,
-          { appearance: 'success', autoDismiss: true }
-        );
-        setCurrentStatus(MediaStatus.UNKNOWN);
-      } else {
+          if (res.status === 204) {
+            addToast(
+              <span>
+                {intl.formatMessage(globalMessages.removeFromBlocklistSuccess, {
+                  title,
+                  strong: (msg: React.ReactNode) => <strong>{msg}</strong>,
+                })}
+              </span>,
+              { appearance: 'success', autoDismiss: true }
+            );
+            setCurrentStatus(MediaStatus.UNKNOWN);
+            if (mutateParent) {
+              mutateParent();
+            }
+          } else {
+            addToast(intl.formatMessage(globalMessages.blocklistError), {
+              appearance: 'error',
+              autoDismiss: true,
+            });
+          }
+        } else {
+          const res = await axios.delete(
+            `/api/v1/blocklist/${id}?mediaType=${mediaType}`
+          );
+
+          if (res.status === 204) {
+            addToast(
+              <span>
+                {intl.formatMessage(globalMessages.removeFromBlocklistSuccess, {
+                  title,
+                  strong: (msg: React.ReactNode) => <strong>{msg}</strong>,
+                })}
+              </span>,
+              { appearance: 'success', autoDismiss: true }
+            );
+            setCurrentStatus(MediaStatus.UNKNOWN);
+            if (mutateParent) {
+              mutateParent();
+            }
+          } else {
+            addToast(intl.formatMessage(globalMessages.blocklistError), {
+              appearance: 'error',
+              autoDismiss: true,
+            });
+          }
+        }
+      } catch {
         addToast(intl.formatMessage(globalMessages.blocklistError), {
           appearance: 'error',
           autoDismiss: true,

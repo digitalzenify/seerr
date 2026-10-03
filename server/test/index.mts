@@ -59,6 +59,9 @@ if (positionals.length > 0) {
   for await (const entry of glob(join(BASE_DIR, 'server/**/*.test.ts'))) {
     files.push(resolve(entry));
   }
+  for await (const entry of glob(join(BASE_DIR, 'src/**/*.test.ts'))) {
+    files.push(resolve(entry));
+  }
   files.sort();
 }
 
@@ -85,6 +88,19 @@ const stream = run({
     join(BASE_DIR, 'server/migration/**'),
   ],
   testNamePatterns: opts.testNamePattern,
+});
+
+// Track failures so the runner exits non-zero when any test fails
+let failedTests = 0;
+stream.on('data', (event: { type: string }) => {
+  if (event.type === 'test:fail') {
+    failedTests++;
+  }
+});
+stream.on('end', () => {
+  if (failedTests > 0) {
+    process.exitCode = 1;
+  }
 });
 
 // In CI, write a JUnit report to a file for use by GitHub
