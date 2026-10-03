@@ -37,6 +37,8 @@ const messages = defineMessages('components.IssueModal.CreateIssueModal', {
   toastviewissue: 'View Issue',
   reportissue: 'Report an Issue',
   submitissue: 'Submit Issue',
+  reportinfo:
+    'Your report goes to the admins, who can reply in the comments. You can follow it any time under Issues.',
 });
 
 const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
@@ -159,6 +161,9 @@ const CreateIssueModal = ({
             loading={!data && !error}
             backdrop={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data?.backdropPath}`}
           >
+            <p className="mb-4 text-sm text-gray-400">
+              {intl.formatMessage(messages.reportinfo)}
+            </p>
             {mediaType === 'tv' && data && !isMovie(data) && (
               <>
                 <div className="form-row">
@@ -284,6 +289,13 @@ const CreateIssueModal = ({
                           >
                             {intl.formatMessage(setting.name)}
                           </Label>
+                          <span
+                            className={`mt-0.5 block text-xs ${
+                              checked ? 'text-indigo-200' : 'text-gray-400'
+                            }`}
+                          >
+                            {intl.formatMessage(setting.hint)}
+                          </span>
                         </div>
                       </>
                     )}
