@@ -768,6 +768,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                   className="ml-2 first:ml-0"
                 >
                   <ExclamationTriangleIcon />
+                  <span>{intl.formatMessage(messages.reportissue)}</span>
                 </Button>
               </Tooltip>
             )}

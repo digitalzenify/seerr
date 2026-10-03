@@ -23,6 +23,9 @@ const messages = defineMessages('components.IssueList', {
   sortAdded: 'Most Recent',
   sortModified: 'Last Modified',
   showallissues: 'Show All Issues',
+  noissues: 'No issues reported yet',
+  noissuesHint:
+    'Found a problem with a movie or show? Open its page and click Report an Issue.',
 });
 
 enum Filter {
@@ -49,6 +52,7 @@ const IssueList = () => {
       pageIndex * currentPageSize
     }&filter=${currentFilter}&sort=${currentSort}`
   );
+  const { data: issueCount } = useSWR<{ total: number }>('/api/v1/issue/count');
 
   // Restore last set filter values on component mount
   useEffect(() => {
@@ -166,17 +170,25 @@ const IssueList = () => {
       {data.results.length === 0 && (
         <div className="flex w-full flex-col items-center justify-center py-24 text-white">
           <span className="text-2xl text-gray-400">
-            {intl.formatMessage(globalMessages.noresults)}
+            {issueCount?.total === 0
+              ? intl.formatMessage(messages.noissues)
+              : intl.formatMessage(globalMessages.noresults)}
           </span>
-          {currentFilter !== Filter.ALL && (
-            <div className="mt-4">
-              <Button
-                buttonType="primary"
-                onClick={() => setCurrentFilter(Filter.ALL)}
-              >
-                {intl.formatMessage(messages.showallissues)}
-              </Button>
-            </div>
+          {issueCount?.total === 0 ? (
+            <span className="mt-2 max-w-lg text-center text-sm text-gray-400">
+              {intl.formatMessage(messages.noissuesHint)}
+            </span>
+          ) : (
+            currentFilter !== Filter.ALL && (
+              <div className="mt-4">
+                <Button
+                  buttonType="primary"
+                  onClick={() => setCurrentFilter(Filter.ALL)}
+                >
+                  {intl.formatMessage(messages.showallissues)}
+                </Button>
+              </div>
+            )
           )}
         </div>
       )}
