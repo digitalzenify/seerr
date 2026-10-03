@@ -30,7 +30,7 @@ the Jellyfin API key).
 ### Method B: Via Plex's official method
 
 Follow Plex's official documentation:
-<https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/>
+https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/
 
 ---
 
