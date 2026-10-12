@@ -44,17 +44,41 @@ export const nextSeasonToRequest = (
 };
 
 /**
+ * The furthest episode the user has reached in the given season, using only
+ * plays from the recent window. This is the progress signal: counting
+ * distinct episodes played on this server instead undercounts whenever
+ * episodes carry watch state from before this server existed (Plex watch
+ * flags follow the account, but leave no play history here) or were skipped
+ * outright, which held the request back until the final episode.
+ */
+export const furthestWatchedInSeason = (
+  plays: TautulliHistoryRecord[],
+  seasonNumber: number,
+  now = Date.now()
+): number =>
+  plays
+    .filter(
+      (record) =>
+        record.parent_media_index === seasonNumber &&
+        (record.watched_status === 1 ||
+          record.percent_complete >= WATCHED_PERCENT_THRESHOLD) &&
+        record.date * 1000 >= now - RECENT_WATCH_DAYS * 24 * 60 * 60 * 1000
+    )
+    .reduce((furthest, record) => Math.max(furthest, record.media_index), 0);
+
+/**
  * Decides whether the next season should be requested for a user based on
- * their watch progress in the current season.
+ * how close to the end of the current season they are and how recently they
+ * watched it.
  */
 export const shouldRequestNextSeason = ({
   episodeCount,
-  watchedCount,
+  furthestWatched,
   lastWatchedAt,
   now = Date.now(),
 }: {
   episodeCount: number;
-  watchedCount: number;
+  furthestWatched: number;
   lastWatchedAt: number | null;
   now?: number;
 }): boolean => {
@@ -62,7 +86,7 @@ export const shouldRequestNextSeason = ({
     return false;
   }
 
-  if (episodeCount - watchedCount > EPISODES_LEFT_THRESHOLD) {
+  if (episodeCount - furthestWatched > EPISODES_LEFT_THRESHOLD) {
     return false;
   }
 
@@ -215,14 +239,9 @@ class AutoSeasonRequest {
             const seasonPlays = history.filter(
               (record) => record.parent_media_index === seasonNumber
             );
-            const watchedEpisodes = new Set(
-              seasonPlays
-                .filter(
-                  (record) =>
-                    record.watched_status === 1 ||
-                    record.percent_complete >= WATCHED_PERCENT_THRESHOLD
-                )
-                .map((record) => record.media_index)
+            const furthestWatched = furthestWatchedInSeason(
+              history,
+              seasonNumber
             );
             const lastWatchedAt = seasonPlays.length
               ? Math.max(...seasonPlays.map((record) => record.date * 1000))
@@ -236,7 +255,7 @@ class AutoSeasonRequest {
             if (
               !shouldRequestNextSeason({
                 episodeCount,
-                watchedCount: watchedEpisodes.size,
+                furthestWatched,
                 lastWatchedAt,
               })
             ) {
@@ -260,7 +279,7 @@ class AutoSeasonRequest {
               mediaId: media.id,
               seasonNumber,
               nextSeason,
-              watchedCount: watchedEpisodes.size,
+              furthestWatched,
               episodeCount,
               userId: user.id,
             });

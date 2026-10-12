@@ -1,10 +1,27 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { TautulliHistoryRecord } from '@server/api/tautulli';
 import {
+  furthestWatchedInSeason,
   nextSeasonToRequest,
   shouldRequestNextSeason,
 } from '@server/lib/autoSeasonRequest';
+
+const play = (
+  seasonNumber: number,
+  episodeNumber: number,
+  playedAt: number,
+  overrides: Partial<TautulliHistoryRecord> = {}
+): TautulliHistoryRecord =>
+  ({
+    parent_media_index: seasonNumber,
+    media_index: episodeNumber,
+    date: playedAt / 1000,
+    watched_status: 1,
+    percent_complete: 100,
+    ...overrides,
+  }) as TautulliHistoryRecord;
 
 describe('nextSeasonToRequest', () => {
   const seasons = [
@@ -30,6 +47,40 @@ describe('nextSeasonToRequest', () => {
   });
 });
 
+describe('furthestWatchedInSeason', () => {
+  const now = 1_800_000_000_000;
+  const daysAgo = (days: number) => now - days * 24 * 60 * 60 * 1000;
+
+  it('returns the furthest watched episode of the season', () => {
+    const plays = [
+      play(1, 1, daysAgo(5)),
+      play(1, 14, daysAgo(1)),
+      play(2, 3, daysAgo(1)),
+    ];
+    assert.equal(furthestWatchedInSeason(plays, 1, now), 14);
+  });
+
+  it('ignores partial plays and plays from other seasons', () => {
+    const plays = [
+      play(1, 10, daysAgo(2), { percent_complete: 40, watched_status: 0 }),
+      play(2, 20, daysAgo(1)),
+    ];
+    assert.equal(furthestWatchedInSeason(plays, 1, now), 0);
+  });
+
+  it('ignores plays outside the recent window (rewatch from the start)', () => {
+    const plays = [play(1, 21, daysAgo(30)), play(1, 2, daysAgo(1))];
+    assert.equal(furthestWatchedInSeason(plays, 1, now), 2);
+  });
+
+  it('counts plays at or above the percent threshold as watched', () => {
+    const plays = [
+      play(1, 7, daysAgo(1), { percent_complete: 85, watched_status: 0 }),
+    ];
+    assert.equal(furthestWatchedInSeason(plays, 1, now), 7);
+  });
+});
+
 describe('shouldRequestNextSeason', () => {
   const now = 1_800_000_000_000;
   const daysAgo = (days: number) => now - days * 24 * 60 * 60 * 1000;
@@ -38,7 +89,21 @@ describe('shouldRequestNextSeason', () => {
     assert.equal(
       shouldRequestNextSeason({
         episodeCount: 10,
-        watchedCount: 7,
+        furthestWatched: 7,
+        lastWatchedAt: daysAgo(1),
+        now,
+      }),
+      true
+    );
+  });
+
+  it('requests based on how far the user got, not on episodes skipped earlier', () => {
+    // 17-episode season, user reached E14 while E7-E9 were watched before
+    // this server existed (so they have no play history here): 3 left.
+    assert.equal(
+      shouldRequestNextSeason({
+        episodeCount: 17,
+        furthestWatched: 14,
         lastWatchedAt: daysAgo(1),
         now,
       }),
@@ -50,7 +115,7 @@ describe('shouldRequestNextSeason', () => {
     assert.equal(
       shouldRequestNextSeason({
         episodeCount: 10,
-        watchedCount: 10,
+        furthestWatched: 10,
         lastWatchedAt: daysAgo(2),
         now,
       }),
@@ -62,7 +127,7 @@ describe('shouldRequestNextSeason', () => {
     assert.equal(
       shouldRequestNextSeason({
         episodeCount: 10,
-        watchedCount: 6,
+        furthestWatched: 6,
         lastWatchedAt: daysAgo(1),
         now,
       }),
@@ -74,7 +139,7 @@ describe('shouldRequestNextSeason', () => {
     assert.equal(
       shouldRequestNextSeason({
         episodeCount: 10,
-        watchedCount: 7,
+        furthestWatched: 7,
         lastWatchedAt: daysAgo(15),
         now,
       }),
@@ -86,7 +151,7 @@ describe('shouldRequestNextSeason', () => {
     assert.equal(
       shouldRequestNextSeason({
         episodeCount: 10,
-        watchedCount: 7,
+        furthestWatched: 7,
         lastWatchedAt: daysAgo(14),
         now,
       }),
@@ -98,7 +163,7 @@ describe('shouldRequestNextSeason', () => {
     assert.equal(
       shouldRequestNextSeason({
         episodeCount: 10,
-        watchedCount: 7,
+        furthestWatched: 7,
         lastWatchedAt: null,
         now,
       }),
@@ -107,7 +172,7 @@ describe('shouldRequestNextSeason', () => {
     assert.equal(
       shouldRequestNextSeason({
         episodeCount: 0,
-        watchedCount: 0,
+        furthestWatched: 0,
         lastWatchedAt: daysAgo(1),
         now,
       }),
