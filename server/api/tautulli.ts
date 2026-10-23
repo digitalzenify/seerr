@@ -338,14 +338,19 @@ class TautulliAPI {
     }
   }
 
+  /**
+   * Watch history for a whole show. Pass a user to narrow it to that user's
+   * plays; omit it to get every user's plays in one call, which is what the
+   * auto-season job needs since the watcher is not always the requester.
+   */
   public async getShowWatchHistory(
-    user: User,
-    grandparentRatingKey: string
+    grandparentRatingKey: string,
+    user?: User
   ): Promise<TautulliHistoryRecord[]> {
     let results: TautulliHistoryRecord[] = [];
 
     try {
-      if (!user.plexId) {
+      if (user && !user.plexId) {
         throw new Error('User does not have an associated Plex ID');
       }
 
@@ -360,7 +365,7 @@ class TautulliAPI {
               grouping: 0,
               order_column: 'date',
               order_dir: 'desc',
-              user_id: user.plexId,
+              ...(user?.plexId ? { user_id: user.plexId } : {}),
               media_type: 'episode',
               grandparent_rating_key: grandparentRatingKey,
               length: take,
@@ -391,7 +396,7 @@ class TautulliAPI {
         {
           label: 'Tautulli API',
           errorMessage: e.message,
-          user: user.displayName,
+          user: user?.displayName,
         }
       );
       throw new Error(
