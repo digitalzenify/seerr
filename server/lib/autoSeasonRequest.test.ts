@@ -6,6 +6,7 @@ import {
   furthestWatchedInSeason,
   nextSeasonToRequest,
   shouldRequestNextSeason,
+  watchersNearSeasonEnd,
 } from '@server/lib/autoSeasonRequest';
 
 const play = (
@@ -78,6 +79,71 @@ describe('furthestWatchedInSeason', () => {
       play(1, 7, daysAgo(1), { percent_complete: 85, watched_status: 0 }),
     ];
     assert.equal(furthestWatchedInSeason(plays, 1, now), 7);
+  });
+});
+
+describe('watchersNearSeasonEnd', () => {
+  const now = 1_800_000_000_000;
+  const daysAgo = (days: number) => now - days * 24 * 60 * 60 * 1000;
+
+  it('picks the viewer who finished the season, not the user who requested it', () => {
+    // The requester (1) never watched anything; the household member (2) did.
+    const plays = [
+      play(2, 12, daysAgo(1), { user_id: 2 }),
+      play(2, 11, daysAgo(2), { user_id: 2 }),
+    ];
+    assert.deepEqual(watchersNearSeasonEnd(plays, 2, 12, now), [
+      { plexId: 2, furthestWatched: 12 },
+    ]);
+  });
+
+  it('returns only watchers within the episode threshold of the season end', () => {
+    const plays = [
+      play(1, 10, daysAgo(1), { user_id: 1 }),
+      play(1, 3, daysAgo(1), { user_id: 2 }),
+      play(1, 1, daysAgo(1), {
+        user_id: 3,
+        percent_complete: 20,
+        watched_status: 0,
+      }),
+    ];
+    assert.deepEqual(watchersNearSeasonEnd(plays, 1, 10, now), [
+      { plexId: 1, furthestWatched: 10 },
+    ]);
+  });
+
+  it('ignores watchers whose plays are stale', () => {
+    const plays = [
+      play(1, 10, daysAgo(30), { user_id: 1 }),
+      play(1, 10, daysAgo(1), { user_id: 2 }),
+    ];
+    assert.deepEqual(watchersNearSeasonEnd(plays, 1, 10, now), [
+      { plexId: 2, furthestWatched: 10 },
+    ]);
+  });
+
+  it('orders multiple qualifying watchers by how far they got', () => {
+    const plays = [
+      play(1, 8, daysAgo(1), { user_id: 1 }),
+      play(1, 10, daysAgo(1), { user_id: 2 }),
+    ];
+    assert.deepEqual(
+      watchersNearSeasonEnd(plays, 1, 10, now).map((c) => c.plexId),
+      [2, 1]
+    );
+  });
+
+  it('returns nothing when the season is unknown or unwatched', () => {
+    assert.deepEqual(watchersNearSeasonEnd([], 1, 10, now), []);
+    assert.deepEqual(
+      watchersNearSeasonEnd(
+        [play(1, 10, daysAgo(1), { user_id: 1 })],
+        1,
+        0,
+        now
+      ),
+      []
+    );
   });
 });
 

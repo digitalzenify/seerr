@@ -13,6 +13,7 @@ import MediaRequest, {
   QuotaRestrictedError,
   RequestPermissionError,
 } from '@server/entity/MediaRequest';
+import { User } from '@server/entity/User';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { In } from 'typeorm';
@@ -97,6 +98,60 @@ export const shouldRequestNextSeason = ({
   return lastWatchedAt >= now - RECENT_WATCH_DAYS * 24 * 60 * 60 * 1000;
 };
 
+/**
+ * Picks the watchers who are close enough to the end of the given season for
+ * the next season to be requested. The requester is not necessarily the person
+ * watching (one household member often places every request), so the job has to
+ * look at who actually watched, not at who asked for the show.
+ */
+export const watchersNearSeasonEnd = (
+  plays: TautulliHistoryRecord[],
+  seasonNumber: number,
+  episodeCount: number,
+  now = Date.now()
+): { plexId: number; furthestWatched: number }[] => {
+  const playsByUser = new Map<number, TautulliHistoryRecord[]>();
+
+  for (const record of plays) {
+    const userPlays = playsByUser.get(record.user_id);
+
+    if (userPlays) {
+      userPlays.push(record);
+    } else {
+      playsByUser.set(record.user_id, [record]);
+    }
+  }
+
+  const candidates: { plexId: number; furthestWatched: number }[] = [];
+
+  for (const [plexId, userPlays] of playsByUser) {
+    const seasonPlays = userPlays.filter(
+      (record) => record.parent_media_index === seasonNumber
+    );
+    const furthestWatched = furthestWatchedInSeason(
+      userPlays,
+      seasonNumber,
+      now
+    );
+    const lastWatchedAt = seasonPlays.length
+      ? Math.max(...seasonPlays.map((record) => record.date * 1000))
+      : null;
+
+    if (
+      shouldRequestNextSeason({
+        episodeCount,
+        furthestWatched,
+        lastWatchedAt,
+        now,
+      })
+    ) {
+      candidates.push({ plexId, furthestWatched });
+    }
+  }
+
+  return candidates.sort((a, b) => b.furthestWatched - a.furthestWatched);
+};
+
 class AutoSeasonRequest {
   private running = false;
 
@@ -125,6 +180,11 @@ class AutoSeasonRequest {
       }
 
       const requestRepository = getRepository(MediaRequest);
+      const usersByPlexId = new Map<string, User>(
+        (await getRepository(User).find())
+          .filter((user) => user.plexId)
+          .map((user) => [String(user.plexId), user])
+      );
       const requests = await requestRepository.find({
         where: {
           type: MediaType.TV,
@@ -148,20 +208,14 @@ class AutoSeasonRequest {
 
       for (const request of requests) {
         const media = request.media;
-        const user = request.requestedBy;
 
-        if (
-          !media ||
-          media.mediaType !== MediaType.TV ||
-          !user?.plexId ||
-          !media.ratingKey
-        ) {
+        if (!media || media.mediaType !== MediaType.TV || !media.ratingKey) {
           continue;
         }
 
         for (const seasonRequest of request.seasons ?? []) {
           const seasonNumber = seasonRequest.seasonNumber;
-          const seasonKey = `${user.id}:${media.id}:${seasonNumber}`;
+          const seasonKey = `${media.id}:${seasonNumber}`;
 
           if (
             seasonNumber < 1 ||
@@ -225,40 +279,33 @@ class AutoSeasonRequest {
               continue;
             }
 
-            const historyKey = `${user.id}:${media.ratingKey}`;
+            const historyKey = String(media.ratingKey);
             let history = historyCache.get(historyKey);
 
             if (!history) {
-              history = await tautulli.getShowWatchHistory(
-                user,
-                media.ratingKey
-              );
+              history = await tautulli.getShowWatchHistory(media.ratingKey);
               historyCache.set(historyKey, history);
             }
-
-            const seasonPlays = history.filter(
-              (record) => record.parent_media_index === seasonNumber
-            );
-            const furthestWatched = furthestWatchedInSeason(
-              history,
-              seasonNumber
-            );
-            const lastWatchedAt = seasonPlays.length
-              ? Math.max(...seasonPlays.map((record) => record.date * 1000))
-              : null;
 
             const currentSeasonMeta = show.seasons.find(
               (season) => season.season_number === seasonNumber
             );
             const episodeCount = currentSeasonMeta?.episode_count ?? 0;
 
-            if (
-              !shouldRequestNextSeason({
-                episodeCount,
-                furthestWatched,
-                lastWatchedAt,
-              })
-            ) {
+            // Whoever reached furthest into the season gets the request,
+            // whether or not they are the user who requested the show.
+            const watcher = watchersNearSeasonEnd(
+              history,
+              seasonNumber,
+              episodeCount
+            )
+              .map((candidate) => ({
+                ...candidate,
+                user: usersByPlexId.get(String(candidate.plexId)),
+              }))
+              .find((candidate) => candidate.user);
+
+            if (!watcher?.user) {
               continue;
             }
 
@@ -269,7 +316,7 @@ class AutoSeasonRequest {
                 seasons: [nextSeason],
                 is4k: false,
               },
-              user,
+              watcher.user,
               { isAutoRequest: true }
             );
 
@@ -279,9 +326,9 @@ class AutoSeasonRequest {
               mediaId: media.id,
               seasonNumber,
               nextSeason,
-              furthestWatched,
+              furthestWatched: watcher.furthestWatched,
               episodeCount,
-              userId: user.id,
+              userId: watcher.user.id,
             });
           } catch (e) {
             if (
