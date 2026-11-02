@@ -36,6 +36,8 @@ import {
   rankCandidates,
 } from '@server/lib/recommendationSources';
 import { getSettings } from '@server/lib/settings';
+import type { TraktRowSource } from '@server/lib/traktDiscovery';
+import { getTraktRow } from '@server/lib/traktDiscovery';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { mapProductionCompany } from '@server/models/Movie';
@@ -1913,6 +1915,61 @@ discoverRoutes.get('/ratings', async (req, res, next) => {
       message: e.message,
     });
     next({ status: 500, message: 'Failed to fetch ratings.' });
+  }
+});
+
+/**
+ * GET /discover/trakt/media
+ *
+ * Global Trakt rows with shows and movies mixed. Trakt decides which titles and
+ * in what order (anticipated, or trending interleaved with popular); TMDB only
+ * supplies the artwork and details Seerr needs.
+ */
+discoverRoutes.get('/trakt/media', async (req, res, next) => {
+  const source: TraktRowSource =
+    req.query.source === 'trending' ? 'trending' : 'anticipated';
+  const page = Number(req.query.page) || 1;
+  const pageSize = 20;
+
+  try {
+    const row = await getTraktRow(source);
+    const start = (page - 1) * pageSize;
+    const paged = row.slice(start, start + pageSize);
+
+    const media = await Media.getRelatedMedia(
+      req.user,
+      paged.map((item) => ({
+        tmdbId: item.id,
+        mediaType: item.media_type,
+      }))
+    );
+
+    return res.status(200).json({
+      page,
+      totalPages: Math.max(1, Math.ceil(row.length / pageSize)),
+      totalResults: row.length,
+      results: paged.map((item) => {
+        const mediaInfo = media.find(
+          (m) =>
+            m.tmdbId === item.id &&
+            m.mediaType ===
+              (item.media_type === 'movie' ? MediaType.MOVIE : MediaType.TV)
+        );
+
+        return item.media_type === 'movie'
+          ? mapMovieResult(item, mediaInfo)
+          : mapTvResult(item, mediaInfo);
+      }),
+    });
+  } catch (e) {
+    logger.error('Failed to build Trakt discovery row', {
+      label: 'Trakt Discovery',
+      message: e.message,
+    });
+    next({
+      status: 500,
+      message: 'Failed to retrieve Trakt discovery results.',
+    });
   }
 });
 

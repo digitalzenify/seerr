@@ -198,6 +198,8 @@
   "components.Discover.tmdbtvgenre": "TMDB Series Genre",
   "components.Discover.tmdbtvkeyword": "TMDB Series Keyword",
   "components.Discover.tmdbtvstreamingservices": "TMDB TV Streaming Services",
+  "components.Discover.traktanticipated": "Most Anticipated",
+  "components.Discover.trakttrending": "Trending & Popular",
   "components.Discover.trending": "Trending",
   "components.Discover.tvgenres": "Series Genres",
   "components.Discover.upcoming": "Upcoming Movies",
