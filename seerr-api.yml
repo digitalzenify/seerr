@@ -7254,6 +7254,52 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/MovieResult'
+  /discover/trakt/media:
+    get:
+      summary: Get a global Trakt discovery row
+      description: |
+        Returns a Trakt-ranked row mixing shows and movies. `source=anticipated`
+        uses Trakt's most anticipated feed; `source=trending` alternates Trakt's
+        24 hour trending feed with its all-time popular feed. Trakt decides which
+        titles are shown and in what order, TMDB supplies the artwork and details.
+        Rows are global and cached for 24 hours.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: source
+          schema:
+            type: string
+            enum:
+              - anticipated
+              - trending
+            default: anticipated
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Trakt discovery row returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                  totalPages:
+                    type: number
+                  totalResults:
+                    type: number
+                  results:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/MovieResult'
+                        - $ref: '#/components/schemas/TvResult'
   /discover/new-for-you:
     get:
       summary: Recent releases picked from the user's watch history

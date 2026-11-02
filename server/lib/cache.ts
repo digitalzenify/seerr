@@ -16,6 +16,7 @@ export type AvailableCacheIds =
   | 'because-you-watched'
   | 'new-for-you'
   | 'trakt'
+  | 'trakt-discover'
   | 'user-stats';
 
 const DEFAULT_TTL = 300;
@@ -283,6 +284,10 @@ class CacheManager {
     trakt: new Cache('trakt', 'Trakt API', {
       stdTtl: 86400, // relations rarely change
       max: 5000,
+    }),
+    'trakt-discover': new Cache('trakt-discover', 'Trakt Discovery Rows', {
+      stdTtl: 86400, // 24 hour cache, one key per row
+      max: 8,
     }),
     // FIX: Reduced TTL from 24h to 4h so stats refresh more frequently,
     // preventing stale "Most Recent Watch" and other time-sensitive stats.

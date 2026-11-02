@@ -406,6 +406,28 @@ const Discover = () => {
           case DiscoverSliderType.NEW_FOR_YOU:
             sliderComponent = <NewForYouSlider />;
             break;
+          case DiscoverSliderType.TRAKT_ANTICIPATED:
+            sliderComponent = (
+              <MediaSlider
+                sliderKey="trakt-anticipated"
+                title={intl.formatMessage(sliderTitles.traktanticipated)}
+                url="/api/v1/discover/trakt/media"
+                extraParams="source=anticipated"
+                hideWhenEmpty
+              />
+            );
+            break;
+          case DiscoverSliderType.TRAKT_TRENDING:
+            sliderComponent = (
+              <MediaSlider
+                sliderKey="trakt-trending"
+                title={intl.formatMessage(sliderTitles.trakttrending)}
+                url="/api/v1/discover/trakt/media"
+                extraParams="source=trending"
+                hideWhenEmpty
+              />
+            );
+            break;
         }
 
         if (isEditing) {
