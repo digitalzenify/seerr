@@ -7254,6 +7254,41 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/MovieResult'
+  /discover/new-for-you:
+    get:
+      summary: Recent releases picked from the user's watch history
+      description: |
+        Returns recent movies, new shows and returning seasons matched to the
+        user's own watch history (Trakt relations, TMDB recommendations and air
+        dates). Nothing is requested automatically. Results are cached per-user
+        with a 48-hour TTL.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            example: 1
+            default: 1
+      responses:
+        '200':
+          description: Personalized new-release recommendations returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                  totalPages:
+                    type: number
+                  totalResults:
+                    type: number
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MovieResult'
   /discover/ratings:
     get:
       summary: Batch-fetch IMDB and Rotten Tomatoes ratings for discover page items

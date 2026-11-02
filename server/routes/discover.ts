@@ -12,7 +12,7 @@ import type {
 } from '@server/api/themoviedb/interfaces';
 import type TraktAPI from '@server/api/trakt';
 import { getTraktClient } from '@server/api/trakt';
-import { MediaType } from '@server/constants/media';
+import { MediaStatus, MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import { User } from '@server/entity/User';
@@ -1525,7 +1525,18 @@ const buildRecommendationRow = async ({
     )?.status;
 
   ranked = ranked
-    .filter((candidate) => isWorthRecommending(statusFor(candidate)))
+    .filter((candidate) => {
+      const status = statusFor(candidate);
+
+      // A show the household already follows only earns a slot when it has
+      // aired something since the last play - never just because Trakt or
+      // TMDB proposed a title that is already sitting in the library.
+      if (status === MediaStatus.PARTIALLY_AVAILABLE) {
+        return candidate.fromAirDate;
+      }
+
+      return isWorthRecommending(status);
+    })
     .slice(0, limit);
 
   const hydrated = await Promise.allSettled(
@@ -1655,7 +1666,7 @@ discoverRoutes.get(
       }
 
       const cache = cacheManager.getCache('new-for-you').data;
-      const cacheKey = `v1-user-${user.id}`;
+      const cacheKey = `v2-user-${user.id}`;
       const cached = cache.get<BecauseYouWatchedCacheEntry>(cacheKey);
 
       if (cached) {
@@ -1669,6 +1680,48 @@ discoverRoutes.get(
         trakt: getTraktClient(),
         newOnly: true,
       });
+
+      // A taste list can be short in a quiet week; top it up with plain new
+      // releases so the row never looks broken. Personalised items stay first.
+      if (items.length < 20) {
+        const topUps = await fallbackNewReleases(
+          createTmdbWithRegionLanguage(user)
+        );
+        const taken = new Set(
+          items.map((item) => `${item.mediaType}:${item.id}`)
+        );
+        const owned = await Media.getRelatedMedia(
+          user,
+          topUps.map((item) => ({
+            tmdbId: item.id,
+            mediaType:
+              item.mediaType === 'movie' ? MediaType.MOVIE : MediaType.TV,
+          }))
+        );
+
+        for (const candidate of topUps) {
+          if (items.length >= 20) {
+            break;
+          }
+
+          const key = `${candidate.mediaType}:${candidate.id}`;
+          const status = owned.find(
+            (row) =>
+              row.tmdbId === candidate.id &&
+              row.mediaType ===
+                (candidate.mediaType === 'movie'
+                  ? MediaType.MOVIE
+                  : MediaType.TV)
+          )?.status;
+
+          if (taken.has(key) || !isWorthRecommending(status)) {
+            continue;
+          }
+
+          taken.add(key);
+          items.push(candidate);
+        }
+      }
 
       if (!items.length) {
         const fallback = await fallbackNewReleases(

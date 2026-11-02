@@ -45,10 +45,10 @@ export interface CandidateFlags {
   airDate?: boolean;
 }
 
-// How long a title counts as "new". Movies get roughly half a year of digital
-// releases, TV a full year because seasons arrive slower.
-export const MOVIE_NEWNESS_DAYS = 180;
-export const TV_NEWNESS_DAYS = 365;
+// How long a title counts as "new". Movies get a year of releases, TV two
+// because seasons arrive slower and a returning show is still a discovery.
+export const MOVIE_NEWNESS_DAYS = 365;
+export const TV_NEWNESS_DAYS = 730;
 
 export const candidateKey = (
   mediaType: RecommendationMediaType,
