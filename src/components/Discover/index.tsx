@@ -8,6 +8,7 @@ import CreateSlider from '@app/components/Discover/CreateSlider';
 import DiscoverSliderEdit from '@app/components/Discover/DiscoverSliderEdit';
 import MovieGenreSlider from '@app/components/Discover/MovieGenreSlider';
 import NetworkSlider from '@app/components/Discover/NetworkSlider';
+import NewForYouSlider from '@app/components/Discover/NewForYouSlider';
 import PlexWatchlistSlider from '@app/components/Discover/PlexWatchlistSlider';
 import RecentRequestsSlider from '@app/components/Discover/RecentRequestsSlider';
 import RecentlyAddedSlider from '@app/components/Discover/RecentlyAddedSlider';
@@ -401,6 +402,9 @@ const Discover = () => {
             break;
           case DiscoverSliderType.BECAUSE_YOU_WATCHED:
             sliderComponent = <BecauseYouWatchedSlider />;
+            break;
+          case DiscoverSliderType.NEW_FOR_YOU:
+            sliderComponent = <NewForYouSlider />;
             break;
         }
 
