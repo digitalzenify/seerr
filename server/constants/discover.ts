@@ -23,6 +23,7 @@ export enum DiscoverSliderType {
   TMDB_MOVIE_STREAMING_SERVICES,
   TMDB_TV_STREAMING_SERVICES,
   BECAUSE_YOU_WATCHED,
+  NEW_FOR_YOU,
 }
 
 export const defaultSliders: Partial<DiscoverSlider>[] = [
@@ -103,5 +104,11 @@ export const defaultSliders: Partial<DiscoverSlider>[] = [
     enabled: true,
     isBuiltIn: true,
     order: 2, // Place it early, after recently added and recent requests
+  },
+  {
+    type: DiscoverSliderType.NEW_FOR_YOU,
+    enabled: true,
+    isBuiltIn: true,
+    order: 3, // Directly under Because You Watched
   },
 ];

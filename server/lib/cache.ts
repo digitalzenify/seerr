@@ -14,6 +14,8 @@ export type AvailableCacheIds =
   | 'imdb-discover'
   | 'rt-discover'
   | 'because-you-watched'
+  | 'new-for-you'
+  | 'trakt'
   | 'user-stats';
 
 const DEFAULT_TTL = 300;
@@ -274,6 +276,14 @@ class CacheManager {
         max: 64,
       }
     ),
+    'new-for-you': new Cache('new-for-you', 'New For You Recommendations', {
+      stdTtl: 86400 * 2, // 48 hour cache
+      max: 64,
+    }),
+    trakt: new Cache('trakt', 'Trakt API', {
+      stdTtl: 86400, // relations rarely change
+      max: 5000,
+    }),
     // FIX: Reduced TTL from 24h to 4h so stats refresh more frequently,
     // preventing stale "Most Recent Watch" and other time-sensitive stats.
     'user-stats': new Cache('user-stats', 'User Statistics', {
