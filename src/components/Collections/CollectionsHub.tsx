@@ -38,6 +38,8 @@ const messages = defineMessages('components.Collections', {
   filterMovies: 'Movies Only',
   filterTv: 'TV Only',
   inLibraryOnly: 'In Library Only',
+  shared: 'Shared',
+  sharedBy: 'with {name}',
 });
 
 interface UserListSummary {
@@ -49,6 +51,9 @@ interface UserListSummary {
   itemCount: number;
   createdAt: string;
   updatedAt: string;
+  ownerId?: number;
+  ownerName?: string;
+  isShared?: boolean;
 }
 
 interface PickedItem {
@@ -371,6 +376,16 @@ const CollectionsHub = () => {
                             {intl.formatMessage(messages.defaultList)}
                           </span>
                         )}
+                        {list.isShared && (
+                          <span className="ml-2 rounded bg-purple-500/20 px-1.5 py-0.5 text-xs font-medium text-purple-300">
+                            {intl.formatMessage(messages.shared)}
+                            {list.ownerId !== currentUser?.id && list.ownerName
+                              ? ` · ${intl.formatMessage(messages.sharedBy, {
+                                  name: list.ownerName,
+                                })}`
+                              : ''}
+                          </span>
+                        )}
                       </h3>
                     )}
                     {list.description && (
@@ -388,32 +403,33 @@ const CollectionsHub = () => {
               </Link>
 
               {/* Action buttons (visible on hover) */}
-              {!list.isDefault && (
-                <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition group-hover:opacity-100">
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setEditingListId(list.id);
-                      setEditName(list.name);
-                    }}
-                    className="rounded bg-gray-700 p-1.5 text-gray-400 transition hover:bg-gray-600 hover:text-white"
-                    title={intl.formatMessage(messages.rename)}
-                  >
-                    <PencilIcon className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleDeleteList(list.id);
-                    }}
-                    className="rounded bg-gray-700 p-1.5 text-gray-400 transition hover:bg-red-600 hover:text-white"
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+              {!list.isDefault &&
+                (!list.isShared || list.ownerId === currentUser?.id) && (
+                  <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingListId(list.id);
+                        setEditName(list.name);
+                      }}
+                      className="rounded bg-gray-700 p-1.5 text-gray-400 transition hover:bg-gray-600 hover:text-white"
+                      title={intl.formatMessage(messages.rename)}
+                    >
+                      <PencilIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDeleteList(list.id);
+                      }}
+                      className="rounded bg-gray-700 p-1.5 text-gray-400 transition hover:bg-red-600 hover:text-white"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
             </div>
           ))}
         </div>

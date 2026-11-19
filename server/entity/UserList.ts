@@ -9,6 +9,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { UserListItem } from './UserListItem';
+import { UserListMember } from './UserListMember';
 
 @Entity()
 export class UserList {
@@ -36,6 +37,9 @@ export class UserList {
 
   @OneToMany(() => UserListItem, (item) => item.list)
   public items: UserListItem[];
+
+  @OneToMany(() => UserListMember, (member) => member.list)
+  public members: UserListMember[];
 
   @DbAwareColumn({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   public createdAt: Date;

@@ -6092,6 +6092,100 @@ paths:
       responses:
         '204':
           description: Item removed
+  /user/{userId}/lists/{listId}/items/{itemId}/vote:
+    put:
+      summary: Vote on a list item
+      description: Sets or clears the current user's vote on a title someone else added to a shared list.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: itemId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+                  nullable: true
+                  enum:
+                    - want
+                    - pass
+      responses:
+        '200':
+          description: Vote saved
+  /user/{userId}/lists/{listId}/members:
+    post:
+      summary: Share a list
+      description: Adds another user to a custom list so both can add titles and vote on each other's picks.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: number
+                username:
+                  type: string
+      responses:
+        '201':
+          description: Member added
+  /user/{userId}/lists/{listId}/members/{memberId}:
+    delete:
+      summary: Remove a list member
+      description: Removes a collaborator from a custom list. A member may remove themselves.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: listId
+          required: true
+          schema:
+            type: number
+        - in: path
+          name: memberId
+          required: true
+          schema:
+            type: number
+      responses:
+        '204':
+          description: Member removed
   /user/{userId}/lists/{listId}/items/reorder:
     put:
       summary: Reorder list items
