@@ -5,6 +5,9 @@ import Media from '@server/entity/Media';
 import { User } from '@server/entity/User';
 import { UserList } from '@server/entity/UserList';
 import { UserListItem } from '@server/entity/UserListItem';
+import { UserListItemVote } from '@server/entity/UserListItemVote';
+import { UserListMember } from '@server/entity/UserListMember';
+import { Permission } from '@server/lib/permissions';
 import logger from '@server/logger';
 import { isOwnProfileOrAdmin } from '@server/utils/profileMiddleware';
 import type { Request } from 'express';
@@ -19,32 +22,92 @@ const ONE_DAY_MS = 86400000;
 const getUserId = (req: Request): number =>
   Number((req.params as Record<string, string>).id);
 
+const isAdmin = (req: Request): boolean =>
+  !!req.user?.hasPermission(Permission.MANAGE_USERS);
+
+/** Full access: rename, delete, invite people. */
+const canEditList = (req: Request, list: UserList): boolean =>
+  isAdmin(req) || list.owner?.id === req.user?.id;
+
+/** Read/add access: owner, invited member, or admin. */
+const canAccessList = (req: Request, list: UserList): boolean =>
+  canEditList(req, list) ||
+  (list.members ?? []).some((member) => member.user?.id === req.user?.id);
+
+const displayNameOf = (user?: User | null): string => user?.displayName ?? '';
+
+/**
+ * Resolve a list by its id and make sure the caller may read it. The `:id`
+ * in the URL is the profile being viewed, not necessarily the list owner -
+ * a shared list is opened from both sides.
+ */
+const resolveList = async (req: Request, listId: number) => {
+  const list = await getRepository(UserList).findOne({
+    where: { id: listId },
+    relations: { members: true, owner: true },
+  });
+
+  if (!list) {
+    return { error: { status: 404, message: 'List not found.' } } as const;
+  }
+
+  if (!canAccessList(req, list)) {
+    return {
+      error: { status: 403, message: 'You do not have access to this list.' },
+    } as const;
+  }
+
+  return { list } as const;
+};
+
+const mapListSummary = (list: UserList, viewerId: number) => ({
+  id: list.id,
+  name: list.name,
+  description: list.description,
+  sortOrder: list.sortOrder,
+  isDefault: list.isDefault,
+  itemCount: list.items?.length ?? 0,
+  createdAt: list.createdAt,
+  updatedAt: list.updatedAt,
+  ownerId: list.owner?.id ?? viewerId,
+  ownerName: displayNameOf(list.owner),
+  isShared: (list.members?.length ?? 0) > 0,
+  members: (list.members ?? []).map((member) => ({
+    id: member.user?.id,
+    displayName: displayNameOf(member.user),
+  })),
+});
+
 /**
  * GET /user/:id/lists
- * Returns all custom lists for the user.
+ * Returns the user's own lists plus every list shared with them.
  */
 router.get('/', isOwnProfileOrAdmin(), async (req, res, next) => {
   try {
+    const userId = getUserId(req);
+
     const listRepo = getRepository(UserList);
-    const lists = await listRepo.find({
-      where: { owner: { id: getUserId(req) } },
+    const owned = await listRepo.find({
+      where: { owner: { id: userId } },
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
-      relations: { items: true },
+      relations: { items: true, members: true },
     });
 
-    // Return lists with item counts and cover art from first item
-    const result = lists.map((list) => ({
-      id: list.id,
-      name: list.name,
-      description: list.description,
-      sortOrder: list.sortOrder,
-      isDefault: list.isDefault,
-      itemCount: list.items?.length ?? 0,
-      createdAt: list.createdAt,
-      updatedAt: list.updatedAt,
-    }));
+    const memberships = await getRepository(UserListMember).find({
+      where: { user: { id: userId } },
+      relations: { list: { items: true, members: true } },
+    });
 
-    return res.status(200).json({ results: result });
+    const seen = new Set(owned.map((list) => list.id));
+    const shared = memberships
+      .map((membership) => membership.list)
+      .filter((list) => list && !seen.has(list.id));
+
+    return res.status(200).json({
+      results: [...owned, ...shared].map((list) =>
+        mapListSummary(list, userId)
+      ),
+    });
   } catch (e) {
     logger.error('Failed to fetch user lists', {
       label: 'UserLists',
@@ -90,16 +153,7 @@ router.post('/', isOwnProfileOrAdmin(), async (req, res, next) => {
 
     const saved = await listRepo.save(newList);
 
-    return res.status(201).json({
-      id: saved.id,
-      name: saved.name,
-      description: saved.description,
-      sortOrder: saved.sortOrder,
-      isDefault: saved.isDefault,
-      itemCount: 0,
-      createdAt: saved.createdAt,
-      updatedAt: saved.updatedAt,
-    });
+    return res.status(201).json(mapListSummary(saved, user.id));
   } catch (e) {
     logger.error('Failed to create user list', {
       label: 'UserLists',
@@ -111,17 +165,23 @@ router.post('/', isOwnProfileOrAdmin(), async (req, res, next) => {
 
 /**
  * GET /user/:id/lists/:listId
- * Returns a specific list with all its items.
+ * Returns a specific list with all its items, who added them and the votes.
  */
 router.get('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
   try {
-    const listRepo = getRepository(UserList);
-    const list = await listRepo.findOne({
-      where: {
-        id: Number(req.params.listId),
-        owner: { id: getUserId(req) },
+    const resolved = await resolveList(req, Number(req.params.listId));
+
+    if ('error' in resolved) {
+      return next(resolved.error);
+    }
+
+    const list = await getRepository(UserList).findOne({
+      where: { id: resolved.list.id },
+      relations: {
+        items: { media: true, votes: true, addedBy: true },
+        members: true,
+        owner: true,
       },
-      relations: { items: { media: true } },
     });
 
     if (!list) {
@@ -141,6 +201,14 @@ router.get('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
       isDefault: list.isDefault,
       createdAt: list.createdAt,
       updatedAt: list.updatedAt,
+      owner: {
+        id: list.owner?.id,
+        displayName: displayNameOf(list.owner),
+      },
+      members: (list.members ?? []).map((member) => ({
+        id: member.user?.id,
+        displayName: displayNameOf(member.user),
+      })),
       items: sortedItems.map((item) => ({
         id: item.id,
         tmdbId: item.tmdbId,
@@ -149,6 +217,17 @@ router.get('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
         sortOrder: item.sortOrder,
         createdAt: item.createdAt,
         media: item.media,
+        addedBy: item.addedBy
+          ? {
+              id: item.addedBy.id,
+              displayName: displayNameOf(item.addedBy),
+            }
+          : null,
+        votes: (item.votes ?? []).map((vote) => ({
+          userId: vote.user?.id,
+          displayName: displayNameOf(vote.user),
+          value: vote.value,
+        })),
       })),
     });
   } catch (e) {
@@ -166,18 +245,20 @@ router.get('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
  */
 router.put('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
   try {
-    const listRepo = getRepository(UserList);
-    const list = await listRepo.findOne({
-      where: {
-        id: Number(req.params.listId),
-        owner: { id: getUserId(req) },
-      },
-    });
+    const resolved = await resolveList(req, Number(req.params.listId));
 
-    if (!list) {
-      return next({ status: 404, message: 'List not found.' });
+    if ('error' in resolved) {
+      return next(resolved.error);
     }
 
+    if (!canEditList(req, resolved.list)) {
+      return next({
+        status: 403,
+        message: 'Only the list owner can change list settings.',
+      });
+    }
+
+    const list = resolved.list;
     const { name, description, sortOrder } = req.body;
 
     if (name !== undefined) {
@@ -196,17 +277,9 @@ router.put('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
       list.sortOrder = sortOrder;
     }
 
-    const saved = await listRepo.save(list);
+    const saved = await getRepository(UserList).save(list);
 
-    return res.status(200).json({
-      id: saved.id,
-      name: saved.name,
-      description: saved.description,
-      sortOrder: saved.sortOrder,
-      isDefault: saved.isDefault,
-      createdAt: saved.createdAt,
-      updatedAt: saved.updatedAt,
-    });
+    return res.status(200).json(mapListSummary(saved, getUserId(req)));
   } catch (e) {
     logger.error('Failed to update user list', {
       label: 'UserLists',
@@ -222,26 +295,27 @@ router.put('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
  */
 router.delete('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
   try {
-    const listRepo = getRepository(UserList);
-    const list = await listRepo.findOne({
-      where: {
-        id: Number(req.params.listId),
-        owner: { id: getUserId(req) },
-      },
-    });
+    const resolved = await resolveList(req, Number(req.params.listId));
 
-    if (!list) {
-      return next({ status: 404, message: 'List not found.' });
+    if ('error' in resolved) {
+      return next(resolved.error);
     }
 
-    if (list.isDefault) {
+    if (!canEditList(req, resolved.list)) {
+      return next({
+        status: 403,
+        message: 'Only the list owner can delete this list.',
+      });
+    }
+
+    if (resolved.list.isDefault) {
       return next({
         status: 400,
         message: 'Cannot delete the default watchlist.',
       });
     }
 
-    await listRepo.remove(list);
+    await getRepository(UserList).remove(resolved.list);
     return res.status(204).send();
   } catch (e) {
     logger.error('Failed to delete user list', {
@@ -253,8 +327,134 @@ router.delete('/:listId', isOwnProfileOrAdmin(), async (req, res, next) => {
 });
 
 /**
+ * POST /user/:id/lists/:listId/members
+ * Share the list with another user (owner only).
+ */
+router.post(
+  '/:listId/members',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    try {
+      const resolved = await resolveList(req, Number(req.params.listId));
+
+      if ('error' in resolved) {
+        return next(resolved.error);
+      }
+
+      if (!canEditList(req, resolved.list)) {
+        return next({
+          status: 403,
+          message: 'Only the list owner can share this list.',
+        });
+      }
+
+      const { userId, username } = req.body ?? {};
+      const userRepo = getRepository(User);
+
+      const target =
+        userId !== undefined
+          ? await userRepo.findOne({ where: { id: Number(userId) } })
+          : await userRepo
+              .createQueryBuilder('user')
+              .where('LOWER(user.username) = LOWER(:username)', { username })
+              .orWhere('LOWER(user.email) = LOWER(:username)', { username })
+              .orWhere('LOWER(user.plexUsername) = LOWER(:username)', {
+                username,
+              })
+              .getOne();
+
+      if (!target) {
+        return next({ status: 404, message: 'User not found.' });
+      }
+
+      if (target.id === resolved.list.owner?.id) {
+        return next({
+          status: 400,
+          message: 'The owner already has access to this list.',
+        });
+      }
+
+      const memberRepo = getRepository(UserListMember);
+      const existing = await memberRepo.findOne({
+        where: { list: { id: resolved.list.id }, user: { id: target.id } },
+      });
+
+      if (existing) {
+        return next({
+          status: 409,
+          message: 'That user is already on this list.',
+        });
+      }
+
+      await memberRepo.save(
+        new UserListMember({ list: resolved.list, user: target })
+      );
+
+      return res.status(201).json({
+        id: target.id,
+        displayName: displayNameOf(target),
+      });
+    } catch (e) {
+      logger.error('Failed to share user list', {
+        label: 'UserLists',
+        message: (e as Error).message,
+      });
+      next({ status: 500, message: 'Failed to share list.' });
+    }
+  }
+);
+
+/**
+ * DELETE /user/:id/lists/:listId/members/:memberId
+ * Owner removes someone; a member may remove themselves (leave the list).
+ */
+router.delete(
+  '/:listId/members/:memberId',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    try {
+      const resolved = await resolveList(req, Number(req.params.listId));
+
+      if ('error' in resolved) {
+        return next(resolved.error);
+      }
+
+      const memberId = Number(req.params.memberId);
+
+      if (!canEditList(req, resolved.list) && req.user?.id !== memberId) {
+        return next({
+          status: 403,
+          message: 'You cannot remove that user from this list.',
+        });
+      }
+
+      const memberRepo = getRepository(UserListMember);
+      const member = await memberRepo.findOne({
+        where: {
+          list: { id: resolved.list.id },
+          user: { id: memberId },
+        },
+      });
+
+      if (!member) {
+        return next({ status: 404, message: 'Member not found.' });
+      }
+
+      await memberRepo.remove(member);
+      return res.status(204).send();
+    } catch (e) {
+      logger.error('Failed to remove list member', {
+        label: 'UserLists',
+        message: (e as Error).message,
+      });
+      next({ status: 500, message: 'Failed to remove member.' });
+    }
+  }
+);
+
+/**
  * POST /user/:id/lists/:listId/items
- * Add an item to a list.
+ * Add an item to a list. The caller is recorded as the one who added it.
  */
 router.post('/:listId/items', isOwnProfileOrAdmin(), async (req, res, next) => {
   try {
@@ -271,21 +471,16 @@ router.post('/:listId/items', isOwnProfileOrAdmin(), async (req, res, next) => {
       return next({ status: 400, message: 'Invalid mediaType.' });
     }
 
-    const listRepo = getRepository(UserList);
-    const list = await listRepo.findOne({
-      where: {
-        id: Number(req.params.listId),
-        owner: { id: getUserId(req) },
-      },
-      relations: { items: true },
-    });
+    const resolved = await resolveList(req, Number(req.params.listId));
 
-    if (!list) {
-      return next({ status: 404, message: 'List not found.' });
+    if ('error' in resolved) {
+      return next(resolved.error);
     }
 
-    // Check for duplicates
+    const list = resolved.list;
     const itemRepo = getRepository(UserListItem);
+
+    // Check for duplicates
     const existing = await itemRepo.findOne({
       where: {
         tmdbId: Number(tmdbId),
@@ -321,6 +516,7 @@ router.post('/:listId/items', isOwnProfileOrAdmin(), async (req, res, next) => {
       sortOrder: (maxSortOrder?.maxSort ?? -1) + 1,
       list,
       media: media ?? undefined,
+      addedBy: req.user,
     });
 
     const saved = await itemRepo.save(newItem);
@@ -333,6 +529,13 @@ router.post('/:listId/items', isOwnProfileOrAdmin(), async (req, res, next) => {
       sortOrder: saved.sortOrder,
       createdAt: saved.createdAt,
       media: saved.media,
+      addedBy: saved.addedBy
+        ? {
+            id: saved.addedBy.id,
+            displayName: displayNameOf(saved.addedBy),
+          }
+        : null,
+      votes: [],
     });
   } catch (e) {
     logger.error('Failed to add item to list', {
@@ -345,26 +548,40 @@ router.post('/:listId/items', isOwnProfileOrAdmin(), async (req, res, next) => {
 
 /**
  * DELETE /user/:id/lists/:listId/items/:itemId
- * Remove an item from a list.
+ * Whoever added an item can remove it; the list owner can remove anything.
  */
 router.delete(
   '/:listId/items/:itemId',
   isOwnProfileOrAdmin(),
   async (req, res, next) => {
     try {
+      const resolved = await resolveList(req, Number(req.params.listId));
+
+      if ('error' in resolved) {
+        return next(resolved.error);
+      }
+
       const itemRepo = getRepository(UserListItem);
       const item = await itemRepo.findOne({
         where: {
           id: Number(req.params.itemId),
-          list: {
-            id: Number(req.params.listId),
-            owner: { id: getUserId(req) },
-          },
+          list: { id: resolved.list.id },
         },
+        relations: { addedBy: true },
       });
 
       if (!item) {
         return next({ status: 404, message: 'Item not found.' });
+      }
+
+      if (
+        !canEditList(req, resolved.list) &&
+        item.addedBy?.id !== req.user?.id
+      ) {
+        return next({
+          status: 403,
+          message: 'You can only remove titles you added yourself.',
+        });
       }
 
       await itemRepo.remove(item);
@@ -380,6 +597,87 @@ router.delete(
 );
 
 /**
+ * PUT /user/:id/lists/:listId/items/:itemId/vote
+ * Body: { value: 'want' | 'pass' | null }. You cannot vote on your own pick.
+ */
+router.put(
+  '/:listId/items/:itemId/vote',
+  isOwnProfileOrAdmin(),
+  async (req, res, next) => {
+    try {
+      const resolved = await resolveList(req, Number(req.params.listId));
+
+      if ('error' in resolved) {
+        return next(resolved.error);
+      }
+
+      const { value } = req.body ?? {};
+
+      if (value !== null && value !== 'want' && value !== 'pass') {
+        return next({
+          status: 400,
+          message: "value must be 'want', 'pass' or null.",
+        });
+      }
+
+      const itemRepo = getRepository(UserListItem);
+      const item = await itemRepo.findOne({
+        where: {
+          id: Number(req.params.itemId),
+          list: { id: resolved.list.id },
+        },
+        relations: { addedBy: true },
+      });
+
+      if (!item) {
+        return next({ status: 404, message: 'Item not found.' });
+      }
+
+      if (item.addedBy?.id === req.user?.id) {
+        return next({
+          status: 400,
+          message: 'You cannot vote on a title you added yourself.',
+        });
+      }
+
+      const voteRepo = getRepository(UserListItemVote);
+      const existing = await voteRepo.findOne({
+        where: {
+          item: { id: item.id },
+          user: { id: req.user?.id },
+        },
+      });
+
+      if (value === null) {
+        if (existing) {
+          await voteRepo.remove(existing);
+        }
+        return res.status(200).json({ userId: req.user?.id, value: null });
+      }
+
+      if (existing) {
+        existing.value = value;
+        await voteRepo.save(existing);
+      } else {
+        await voteRepo.save(
+          new UserListItemVote({ item, user: req.user, value })
+        );
+      }
+
+      return res
+        .status(200)
+        .json({ itemId: item.id, userId: req.user?.id, value });
+    } catch (e) {
+      logger.error('Failed to save list item vote', {
+        label: 'UserLists',
+        message: (e as Error).message,
+      });
+      next({ status: 500, message: 'Failed to save vote.' });
+    }
+  }
+);
+
+/**
  * PUT /user/:id/lists/:listId/items/reorder
  * Reorder items in a list.
  */
@@ -388,6 +686,12 @@ router.put(
   isOwnProfileOrAdmin(),
   async (req, res, next) => {
     try {
+      const resolved = await resolveList(req, Number(req.params.listId));
+
+      if ('error' in resolved) {
+        return next(resolved.error);
+      }
+
       const { itemIds } = req.body;
 
       if (!Array.isArray(itemIds)) {
@@ -397,22 +701,10 @@ router.put(
         });
       }
 
-      const listRepo = getRepository(UserList);
-      const list = await listRepo.findOne({
-        where: {
-          id: Number(req.params.listId),
-          owner: { id: getUserId(req) },
-        },
-      });
-
-      if (!list) {
-        return next({ status: 404, message: 'List not found.' });
-      }
-
       const itemRepo = getRepository(UserListItem);
       for (let i = 0; i < itemIds.length; i++) {
         await itemRepo.update(
-          { id: Number(itemIds[i]), list: { id: list.id } },
+          { id: Number(itemIds[i]), list: { id: resolved.list.id } },
           { sortOrder: i }
         );
       }
@@ -445,8 +737,11 @@ router.get(
       let query = itemRepo
         .createQueryBuilder('item')
         .innerJoinAndSelect('item.list', 'list')
+        .leftJoin('list.members', 'member')
         .leftJoinAndSelect('item.media', 'media')
-        .where('list.ownerId = :userId', { userId });
+        .where('(list.ownerId = :userId OR member.userId = :userId)', {
+          userId,
+        });
 
       if (listIds && typeof listIds === 'string') {
         const ids = listIds
@@ -580,7 +875,7 @@ router.get(
 
 /**
  * GET /user/:id/lists/random
- * Pick a random item from the user's lists.
+ * Pick a random item from the user's lists (own and shared).
  * Optional query params: genre, mediaType, maxRuntime, listId
  */
 router.get('/random/pick', isOwnProfileOrAdmin(), async (req, res, next) => {
@@ -592,8 +887,11 @@ router.get('/random/pick', isOwnProfileOrAdmin(), async (req, res, next) => {
     let query = itemRepo
       .createQueryBuilder('item')
       .innerJoin('item.list', 'list')
+      .leftJoin('list.members', 'member')
       .leftJoinAndSelect('item.media', 'media')
-      .where('list.ownerId = :userId', { userId });
+      .where('(list.ownerId = :userId OR member.userId = :userId)', {
+        userId,
+      });
 
     if (listId) {
       query = query.andWhere('list.id = :listId', {

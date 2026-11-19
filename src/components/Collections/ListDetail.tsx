@@ -10,7 +10,10 @@ import defineMessages from '@app/utils/defineMessages';
 import {
   ArrowPathIcon,
   ArrowsUpDownIcon,
+  HandThumbDownIcon,
+  HandThumbUpIcon,
   TrashIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
 import type Media from '@server/entity/Media';
@@ -42,7 +45,42 @@ const messages = defineMessages('components.Collections.ListDetail', {
   inLibraryOnly: 'In Library Only',
   filterLibrary: 'In Library',
   shownOf: '{shown} of {total} shown',
+  sharedWith: 'Shared with {names}',
+  invite: 'Invite',
+  invitePlaceholder: 'Username or email',
+  inviteFailed: 'Could not find that user.',
+  leaveList: 'Leave list',
+  addedBy: 'Added by {name}',
+  voteWant: 'I want to watch this too',
+  votePass: 'Not for me, watch it alone',
+  votePending: 'Waiting for a vote',
+  filterAdder: 'Added by',
+  filterAdderAll: 'Anyone',
+  filterAdderMe: 'Me',
+  filterAdderOther: 'The other person',
+  filterType: 'Type',
+  filterTypeAll: 'Movies & TV',
+  filterTypeMovies: 'Movies',
+  filterTypeTv: 'TV',
+  filterVote: 'Vote',
+  filterVoteAll: 'Any vote',
+  filterVoteBoth: 'Both want it',
+  filterVoteAlone: 'Only one wants',
+  filterVotePending: 'Not voted yet',
 });
+
+interface Participant {
+  id: number;
+  displayName: string;
+}
+
+type VoteValue = 'want' | 'pass';
+
+interface ItemVote {
+  userId: number;
+  displayName: string;
+  value: VoteValue;
+}
 
 interface ListItem {
   id: number;
@@ -52,6 +90,8 @@ interface ListItem {
   sortOrder: number;
   createdAt: string;
   media?: Media;
+  addedBy?: Participant | null;
+  votes?: ItemVote[];
 }
 
 interface ListDetail {
@@ -62,6 +102,8 @@ interface ListDetail {
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
+  owner?: Participant;
+  members?: Participant[];
   items: ListItem[];
 }
 
@@ -77,14 +119,115 @@ const isInLibrary = (status?: MediaStatus): boolean =>
   status === MediaStatus.AVAILABLE ||
   status === MediaStatus.PARTIALLY_AVAILABLE;
 
+interface VoteControlsProps {
+  item: ListItem;
+  currentUserId?: number;
+  participants: Participant[];
+  onVote: (itemId: number, value: VoteValue | null) => void;
+}
+
+/**
+ * Shows who added the title and lets the people who did not add it vote
+ * "want" or "pass". Your own pick lists the other person's vote instead.
+ */
+const VoteControls = ({
+  item,
+  currentUserId,
+  participants,
+  onVote,
+}: VoteControlsProps) => {
+  const intl = useIntl();
+  const isMine = item.addedBy?.id === currentUserId;
+  const myVote = item.votes?.find(
+    (vote) => vote.userId === currentUserId
+  )?.value;
+  const otherVotes = participants
+    .filter((person) => person.id !== item.addedBy?.id)
+    .map((person) => ({
+      person,
+      value: item.votes?.find((vote) => vote.userId === person.id)?.value,
+    }));
+
+  if (!isMine) {
+    return (
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onVote(item.id, myVote === 'want' ? null : 'want')}
+          title={intl.formatMessage(messages.voteWant)}
+          className={`rounded p-1 ${
+            myVote === 'want'
+              ? 'bg-green-600 text-white'
+              : 'text-gray-400 hover:bg-green-700 hover:text-white'
+          }`}
+        >
+          <HandThumbUpIcon className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => onVote(item.id, myVote === 'pass' ? null : 'pass')}
+          title={intl.formatMessage(messages.votePass)}
+          className={`rounded p-1 ${
+            myVote === 'pass'
+              ? 'bg-red-600 text-white'
+              : 'text-gray-400 hover:bg-red-700 hover:text-white'
+          }`}
+        >
+          <HandThumbDownIcon className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  // My own pick: show what the others answered.
+  return (
+    <div className="flex items-center gap-1.5">
+      {otherVotes.map(({ person, value }) => (
+        <span
+          key={person.id}
+          title={person.displayName}
+          className={`flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium ${
+            value === 'want'
+              ? 'bg-green-900/60 text-green-300'
+              : value === 'pass'
+                ? 'bg-red-900/60 text-red-300'
+                : 'bg-gray-700/60 text-gray-400'
+          }`}
+        >
+          {value === 'want' ? (
+            <HandThumbUpIcon className="h-3 w-3" />
+          ) : value === 'pass' ? (
+            <HandThumbDownIcon className="h-3 w-3" />
+          ) : (
+            <span className="h-2 w-2 rounded-full bg-gray-500" />
+          )}
+        </span>
+      ))}
+    </div>
+  );
+};
+
 // Horizontal list-view row that lazily fetches TMDB details
 interface ListItemRowProps {
   item: ListItem;
   onRemove: (id: number) => void;
   removeLabel: string;
+  showAttribution: boolean;
+  canRemove: boolean;
+  currentUserId?: number;
+  participants: Participant[];
+  onVote: (itemId: number, value: VoteValue | null) => void;
 }
 
-const ListItemRow = ({ item, onRemove, removeLabel }: ListItemRowProps) => {
+const ListItemRow = ({
+  item,
+  onRemove,
+  removeLabel,
+  showAttribution,
+  canRemove,
+  currentUserId,
+  participants,
+  onVote,
+}: ListItemRowProps) => {
+  const intl = useIntl();
   const { ref, inView } = useInView({ triggerOnce: true });
   const url =
     item.mediaType === 'movie'
@@ -166,14 +309,33 @@ const ListItemRow = ({ item, onRemove, removeLabel }: ListItemRowProps) => {
         )}
       </Link>
 
+      {showAttribution && item.addedBy && (
+        <span className="shrink-0 text-xs text-gray-500">
+          {intl.formatMessage(messages.addedBy, {
+            name: item.addedBy.displayName,
+          })}
+        </span>
+      )}
+
+      {showAttribution && (
+        <VoteControls
+          item={item}
+          currentUserId={currentUserId}
+          participants={participants}
+          onVote={onVote}
+        />
+      )}
+
       {/* Remove button */}
-      <button
-        onClick={() => onRemove(item.id)}
-        className="shrink-0 rounded p-1.5 text-gray-400 opacity-0 transition hover:bg-red-600 hover:text-white group-hover:opacity-100"
-        title={removeLabel}
-      >
-        <TrashIcon className="h-4 w-4" />
-      </button>
+      {canRemove && (
+        <button
+          onClick={() => onRemove(item.id)}
+          className="shrink-0 rounded p-1.5 text-gray-400 opacity-0 transition hover:bg-red-600 hover:text-white group-hover:opacity-100"
+          title={removeLabel}
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 };
@@ -204,8 +366,27 @@ const ListDetailPage = () => {
   const [showPickResult, setShowPickResult] = useState(false);
   const [pickInLibraryOnly, setPickInLibraryOnly] = useState(false);
   const [filterLibraryOnly, setFilterLibraryOnly] = useState(false);
+  const [filterAdder, setFilterAdder] = useState<'all' | 'me' | 'other'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'movie' | 'tv'>('all');
+  const [filterVote, setFilterVote] = useState<
+    'all' | 'both' | 'alone' | 'pending'
+  >('all');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteError, setInviteError] = useState(false);
 
   const isLoading = !list && !error;
+
+  const participants: Participant[] = list
+    ? [list.owner, ...(list.members ?? [])]
+        .filter((person): person is Participant => !!person?.id)
+        .filter(
+          (person, index, all) =>
+            all.findIndex((other) => other.id === person.id) === index
+        )
+    : [];
+  const isShared = (list?.members?.length ?? 0) > 0;
+  const isOwner = !!list?.owner && list.owner.id === currentUser?.id;
+  const me = currentUser?.id;
 
   const handleRemoveItem = useCallback(
     async (itemId: number) => {
@@ -214,6 +395,65 @@ const ListDetailPage = () => {
         await fetch(`/api/v1/user/${userId}/lists/${listId}/items/${itemId}`, {
           method: 'DELETE',
         });
+        mutate();
+      } catch {
+        // Handle error silently
+      }
+    },
+    [userId, listId, mutate]
+  );
+
+  const handleVote = useCallback(
+    async (itemId: number, value: VoteValue | null) => {
+      if (!userId || !listId) return;
+      try {
+        await fetch(
+          `/api/v1/user/${userId}/lists/${listId}/items/${itemId}/vote`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value }),
+          }
+        );
+        mutate();
+      } catch {
+        // Handle error silently
+      }
+    },
+    [userId, listId, mutate]
+  );
+
+  const handleInvite = useCallback(async () => {
+    if (!userId || !listId || !inviteName.trim()) return;
+    setInviteError(false);
+    try {
+      const res = await fetch(
+        `/api/v1/user/${userId}/lists/${listId}/members`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: inviteName.trim() }),
+        }
+      );
+      if (!res.ok) {
+        setInviteError(true);
+        return;
+      }
+      setInviteName('');
+      mutate();
+    } catch {
+      setInviteError(true);
+    }
+  }, [userId, listId, inviteName, mutate]);
+
+  const handleRemoveMember = useCallback(
+    async (memberId: number) => {
+      if (!userId || !listId) return;
+      try {
+        await fetch(
+          `/api/v1/user/${userId}/lists/${listId}/members/${memberId}`,
+          { method: 'DELETE' }
+        );
         mutate();
       } catch {
         // Handle error silently
@@ -268,10 +508,32 @@ const ListDetailPage = () => {
     }
   });
 
-  // Apply library filter
-  const filteredItems = filterLibraryOnly
-    ? sortedItems.filter((item) => isInLibrary(item.media?.status))
-    : sortedItems;
+  const matchesVoteFilter = (item: ListItem): boolean => {
+    if (filterVote === 'all') return true;
+    const othersOnItem = participants.filter(
+      (person) => person.id !== item.addedBy?.id
+    );
+    const values = othersOnItem.map(
+      (person) => item.votes?.find((vote) => vote.userId === person.id)?.value
+    );
+    if (filterVote === 'both') {
+      return values.length > 0 && values.every((value) => value === 'want');
+    }
+    if (filterVote === 'alone') {
+      return values.some((value) => value === 'pass');
+    }
+    return values.some((value) => value === undefined);
+  };
+
+  // Apply filters
+  const filteredItems = sortedItems.filter((item) => {
+    if (filterLibraryOnly && !isInLibrary(item.media?.status)) return false;
+    if (filterType !== 'all' && item.mediaType !== filterType) return false;
+    if (filterAdder === 'me' && item.addedBy?.id !== me) return false;
+    if (filterAdder === 'other' && item.addedBy?.id === me) return false;
+    if (isShared && !matchesVoteFilter(item)) return false;
+    return true;
+  });
 
   if (isLoading) {
     return (
@@ -312,6 +574,66 @@ const ListDetailPage = () => {
                 count: sortedItems.length,
               })}
             </p>
+            {isShared && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <p className="text-sm text-indigo-300">
+                  {intl.formatMessage(messages.sharedWith, {
+                    names: participants
+                      .filter((person) => person.id !== me)
+                      .map((person) => person.displayName)
+                      .join(', '),
+                  })}
+                </p>
+                {participants
+                  .filter((person) => person.id !== me)
+                  .map((person) => (
+                    <span
+                      key={person.id}
+                      className="flex items-center gap-1 rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-300"
+                    >
+                      {person.displayName}
+                      {isOwner && (
+                        <button
+                          onClick={() => handleRemoveMember(person.id)}
+                          className="text-gray-500 hover:text-red-400"
+                          title={intl.formatMessage(messages.removeItem)}
+                        >
+                          <XMarkIcon className="h-3 w-3" />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                {!isOwner && !!me && (
+                  <button
+                    onClick={() => handleRemoveMember(me)}
+                    className="text-xs text-gray-500 transition hover:text-red-400"
+                  >
+                    {intl.formatMessage(messages.leaveList)}
+                  </button>
+                )}
+              </div>
+            )}
+            {isOwner && (
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  placeholder={intl.formatMessage(messages.invitePlaceholder)}
+                  className="w-48 rounded border-0 bg-gray-800 px-2 py-1 text-sm text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  onClick={handleInvite}
+                  className="rounded bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-500"
+                >
+                  {intl.formatMessage(messages.invite)}
+                </button>
+                {inviteError && (
+                  <span className="text-xs text-red-400">
+                    {intl.formatMessage(messages.inviteFailed)}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Pick from this list */}
@@ -394,6 +716,67 @@ const ListDetailPage = () => {
                 </option>
               </select>
             </div>
+            {/* Shared-list filters */}
+            {isShared && (
+              <>
+                <select
+                  value={filterAdder}
+                  onChange={(e) =>
+                    setFilterAdder(e.target.value as 'all' | 'me' | 'other')
+                  }
+                  className="rounded border-0 bg-gray-800 px-2 py-1 text-sm text-white focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="all">
+                    {intl.formatMessage(messages.filterAdderAll)}
+                  </option>
+                  <option value="me">
+                    {intl.formatMessage(messages.filterAdderMe)}
+                  </option>
+                  <option value="other">
+                    {intl.formatMessage(messages.filterAdderOther)}
+                  </option>
+                </select>
+                <select
+                  value={filterVote}
+                  onChange={(e) =>
+                    setFilterVote(
+                      e.target.value as 'all' | 'both' | 'alone' | 'pending'
+                    )
+                  }
+                  className="rounded border-0 bg-gray-800 px-2 py-1 text-sm text-white focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="all">
+                    {intl.formatMessage(messages.filterVoteAll)}
+                  </option>
+                  <option value="both">
+                    {intl.formatMessage(messages.filterVoteBoth)}
+                  </option>
+                  <option value="alone">
+                    {intl.formatMessage(messages.filterVoteAlone)}
+                  </option>
+                  <option value="pending">
+                    {intl.formatMessage(messages.filterVotePending)}
+                  </option>
+                </select>
+              </>
+            )}
+            <select
+              value={filterType}
+              onChange={(e) =>
+                setFilterType(e.target.value as 'all' | 'movie' | 'tv')
+              }
+              className="rounded border-0 bg-gray-800 px-2 py-1 text-sm text-white focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">
+                {intl.formatMessage(messages.filterTypeAll)}
+              </option>
+              <option value="movie">
+                {intl.formatMessage(messages.filterTypeMovies)}
+              </option>
+              <option value="tv">
+                {intl.formatMessage(messages.filterTypeTv)}
+              </option>
+            </select>
             {/* Library filter */}
             <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-400">
               <input
@@ -449,26 +832,54 @@ const ListDetailPage = () => {
           </div>
         ) : viewMode === 'grid' ? (
           <ul className="cards-vertical mt-4">
-            {filteredItems.map((item) => (
-              <li key={item.id} className="group relative">
-                <TmdbTitleCard
-                  id={item.tmdbId}
-                  tmdbId={item.tmdbId}
-                  type={item.mediaType}
-                  canExpand
-                />
-                <div className="mt-1 flex justify-end opacity-0 transition group-hover:opacity-100">
-                  <button
-                    onClick={() => handleRemoveItem(item.id)}
-                    className="flex items-center gap-1 rounded bg-red-900/60 px-2 py-0.5 text-xs text-red-300 hover:bg-red-600 hover:text-white"
-                    title={intl.formatMessage(messages.removeItem)}
-                  >
-                    <TrashIcon className="h-3 w-3" />
-                    {intl.formatMessage(messages.removeItem)}
-                  </button>
-                </div>
-              </li>
-            ))}
+            {filteredItems.map((item) => {
+              const canRemove = !isShared || isOwner || item.addedBy?.id === me;
+              return (
+                <li key={item.id} className="group relative">
+                  <TmdbTitleCard
+                    id={item.tmdbId}
+                    tmdbId={item.tmdbId}
+                    type={item.mediaType}
+                    canExpand
+                  />
+                  <div className="mt-1 flex items-center justify-between gap-1">
+                    {isShared ? (
+                      <VoteControls
+                        item={item}
+                        currentUserId={me}
+                        participants={participants}
+                        onVote={handleVote}
+                      />
+                    ) : (
+                      <span />
+                    )}
+                    <div
+                      className={`flex items-center gap-1 ${
+                        canRemove
+                          ? 'opacity-0 transition group-hover:opacity-100'
+                          : ''
+                      }`}
+                    >
+                      {isShared && item.addedBy && (
+                        <span className="truncate text-[10px] text-gray-500">
+                          {item.addedBy.displayName}
+                        </span>
+                      )}
+                      {canRemove && (
+                        <button
+                          onClick={() => handleRemoveItem(item.id)}
+                          className="flex items-center gap-1 rounded bg-red-900/60 px-2 py-0.5 text-xs text-red-300 hover:bg-red-600 hover:text-white"
+                          title={intl.formatMessage(messages.removeItem)}
+                        >
+                          <TrashIcon className="h-3 w-3" />
+                          {intl.formatMessage(messages.removeItem)}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="mt-4 space-y-2">
@@ -478,6 +889,11 @@ const ListDetailPage = () => {
                 item={item}
                 onRemove={handleRemoveItem}
                 removeLabel={intl.formatMessage(messages.removeItem)}
+                showAttribution={isShared}
+                canRemove={!isShared || isOwner || item.addedBy?.id === me}
+                currentUserId={me}
+                participants={participants}
+                onVote={handleVote}
               />
             ))}
           </div>
