@@ -11,6 +11,8 @@ import { Session } from '@server/entity/Session';
 import { User } from '@server/entity/User';
 import { UserList } from '@server/entity/UserList';
 import { UserListItem } from '@server/entity/UserListItem';
+import { UserListItemVote } from '@server/entity/UserListItemVote';
+import { UserListMember } from '@server/entity/UserListMember';
 import { UserPushSubscription } from '@server/entity/UserPushSubscription';
 import { UserSettings } from '@server/entity/UserSettings';
 import { Watchlist } from '@server/entity/Watchlist';
@@ -40,6 +42,8 @@ const entities = [
   User,
   UserList,
   UserListItem,
+  UserListItemVote,
+  UserListMember,
   UserPushSubscription,
   UserSettings,
   Watchlist,
