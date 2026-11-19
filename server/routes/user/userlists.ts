@@ -351,6 +351,13 @@ router.post(
       const { userId, username } = req.body ?? {};
       const userRepo = getRepository(User);
 
+      if (userId === undefined && !username) {
+        return next({
+          status: 400,
+          message: 'userId or username is required.',
+        });
+      }
+
       const target =
         userId !== undefined
           ? await userRepo.findOne({ where: { id: Number(userId) } })
