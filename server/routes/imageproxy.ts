@@ -1,4 +1,5 @@
 import ImageProxy from '@server/lib/imageproxy';
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { Router } from 'express';
 
@@ -16,6 +17,25 @@ function initTmdbImageProxy() {
     });
   }
   return _tmdbImageProxy;
+}
+/**
+ * Library art served straight from the media server through Tautulli, which
+ * already proxies Plex images. The Tautulli API key never reaches the client:
+ * callers ask for /imageproxy/plex/<ratingKey> and the URL is built here.
+ */
+let _plexImageProxy: ImageProxy;
+let _plexImageProxyBase: string;
+function initPlexImageProxy(baseUrl: string) {
+  if (!_plexImageProxy || _plexImageProxyBase !== baseUrl) {
+    _plexImageProxy = new ImageProxy('plex', baseUrl, {
+      rateLimitOptions: {
+        maxRequests: 20,
+        maxRPS: 50,
+      },
+    });
+    _plexImageProxyBase = baseUrl;
+  }
+  return _plexImageProxy;
 }
 let _tvdbImageProxy: ImageProxy;
 function initTvdbImageProxy() {
@@ -47,6 +67,33 @@ router.get<{
       imageData = await initTmdbImageProxy().getImage(imagePath);
     } else if (req.params.type === 'tvdb') {
       imageData = await initTvdbImageProxy().getImage(imagePath);
+    } else if (req.params.type === 'plex') {
+      const ratingKey = req.params.path.join('/');
+
+      if (!/^\d+$/.test(ratingKey)) {
+        logger.error('Invalid rating key for library image', { ratingKey });
+        return next({ status: 400, message: 'Invalid rating key.' });
+      }
+
+      const tautulli = getSettings().tautulli;
+
+      if (!tautulli.hostname || !tautulli.apiKey) {
+        return next({
+          status: 404,
+          message: 'Media server images are not configured.',
+        });
+      }
+
+      const baseUrl = `${tautulli.useSsl ? 'https' : 'http'}://${
+        tautulli.hostname
+      }:${tautulli.port}${tautulli.urlBase ?? ''}`;
+      const img = encodeURIComponent(`/library/metadata/${ratingKey}/thumb`);
+
+      imageData = await initPlexImageProxy(baseUrl).getImage(
+        `/api/v2?cmd=pms_image_proxy&apikey=${encodeURIComponent(
+          tautulli.apiKey
+        )}&img=${img}&width=400&height=600&fallback=poster&rating_key=${ratingKey}`
+      );
     } else {
       logger.error('Unsupported image type', {
         imagePath,

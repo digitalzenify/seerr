@@ -17,16 +17,22 @@ import type {
   UserResultsResponse,
   UserStatisticsResponse,
   UserWatchDataResponse,
+  UserWrappedLockedResponse,
+  UserWrappedResponse,
 } from '@server/interfaces/api/userInterfaces';
 import cacheManager from '@server/lib/cache';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
+import {
+  collectWatchAggregate,
+  toStatisticsResponse,
+  toWrappedResponse,
+} from '@server/lib/userWatchStats';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { getHostname } from '@server/utils/getHostname';
 import { normalizeJellyfinGuid } from '@server/utils/jellyfin';
 import { isOwnProfileOrAdmin } from '@server/utils/profileMiddleware';
-import axios from 'axios';
 import { Router } from 'express';
 import gravatarUrl from 'gravatar-url';
 import { findIndex, sortBy } from 'lodash';
@@ -1014,10 +1020,15 @@ router.get<{ id: string }, WatchlistResponse>(
 );
 
 /**
+ * Yearly wrapped unlock. Announcement page is visible immediately; the data
+ * itself stays server-side until this moment so a clock change can't open it.
+ */
+const WRAPPED_UNLOCK_AT = '2026-12-11T20:00:00+02:00';
+
+/**
  * GET /:id/statistics
- * Returns detailed viewing statistics for the user.
- * Data is sourced from Jellyfin watch history and Seerr request history.
- * Results are cached per-user for 4 hours.
+ * Watch statistics for a user, computed from Tautulli play history.
+ * Request counts come from Seerr's own database. Cached by the route cache.
  */
 router.get<{ id: string }, UserStatisticsResponse>(
   '/:id/statistics',
@@ -1036,54 +1047,29 @@ router.get<{ id: string }, UserStatisticsResponse>(
         where: { id: Number(req.params.id) },
       });
 
-      /**
-       * Compute an approximate week key (YYYY-Www) for chart bucketing.
-       * Uses a simplified formula: week = ceil((dayOfYear + jan1DayOfWeek) / 7).
-       * This may differ from ISO 8601 week numbering at year boundaries
-       * (e.g., Dec 31 might map to week 53 instead of week 1 of next year),
-       * but is sufficient for chart display purposes where the goal is
-       * consistent weekly grouping rather than standards compliance.
-       */
-      const getApproxWeekKey = (date: Date): string => {
-        const year = date.getFullYear();
-        const jan1 = new Date(year, 0, 1);
-        const dayOfYear =
-          Math.floor((date.getTime() - jan1.getTime()) / 86400000) + 1;
-        const weekNum = Math.ceil((dayOfYear + jan1.getDay()) / 7);
-        return `${year}-W${String(weekNum).padStart(2, '0')}`;
-      };
+      const settings = getSettings().tautulli;
 
-      // Initialize stats
-      const stats: UserStatisticsResponse = {
-        totalMoviesWatched: 0,
-        totalEpisodesWatched: 0,
-        totalWatchTimeMinutes: 0,
-        averageWatchTimePerWeekMinutes: 0,
-        topGenres: [],
-        favoriteDecade: null,
-        topActors: [],
-        topDirectors: [],
-        mostWatchedShow: null,
-        currentStreak: 0,
-        longestStreak: 0,
-        requestsMade: 0,
-        requestsFulfilled: 0,
-        mostRecentWatch: null,
-        preferredWatchingHour: null,
-        mostActiveDay: null,
-        genresByMonth: [],
-        libraryUtilization: null,
-      };
+      if (!settings.hostname || !settings.port || !settings.apiKey) {
+        return next({
+          status: 404,
+          message: 'Tautulli API not configured.',
+        });
+      }
 
-      // Get request statistics from the database
+      const tautulli = new TautulliAPI(settings);
+      const [aggregate, libraries] = await Promise.all([
+        collectWatchAggregate(tautulli, user),
+        tautulli.getLibraries().catch(() => null),
+      ]);
+
+      const stats = toStatisticsResponse(aggregate, libraries);
+
+      // Requests are Seerr's own data, not Tautulli's.
       const requestRepo = getRepository(MediaRequest);
-      const totalRequests = await requestRepo.count({
+      stats.requestsMade = await requestRepo.count({
         where: { requestedBy: { id: user.id } },
       });
-      stats.requestsMade = totalRequests;
-
-      // Count fulfilled requests (PARTIALLY_AVAILABLE = 4 or AVAILABLE = 5)
-      const fulfilledRequests = await requestRepo
+      stats.requestsFulfilled = await requestRepo
         .createQueryBuilder('request')
         .innerJoin('request.media', 'media')
         .where('request.requestedBy = :userId', { userId: user.id })
@@ -1091,391 +1077,7 @@ router.get<{ id: string }, UserStatisticsResponse>(
           statuses: [MediaStatus.PARTIALLY_AVAILABLE, MediaStatus.AVAILABLE],
         })
         .getCount();
-      stats.requestsFulfilled = fulfilledRequests;
 
-      // Fetch Jellyfin watch data if the user has a Jellyfin account
-      if (user.jellyfinUserId) {
-        const settings = getSettings();
-        const jf = settings.jellyfin;
-        if (jf.ip && jf.apiKey) {
-          const protocol = jf.useSsl ? 'https' : 'http';
-          const urlBase = jf.urlBase ? `/${jf.urlBase.replace(/^\//, '')}` : '';
-          const baseUrl = `${protocol}://${jf.ip}:${jf.port}${urlBase}`;
-
-          const jellyfinClient = new JellyfinAPI(baseUrl, jf.apiKey);
-          jellyfinClient.setUserId(user.jellyfinUserId);
-
-          // FIX: Paginate through ALL played items instead of using a fixed limit.
-          // Previously, only 500 movies and 1000 episodes were fetched, causing
-          // aggregate stats (genres, actors, streaks, etc.) to be incomplete for
-          // users with larger watch histories while TotalRecordCount was correct.
-          const PAGE_SIZE = 500;
-
-          const fetchAllPlayedItems = async (
-            itemType: string,
-            fields: string
-          ) => {
-            const firstPage = await jellyfinClient.getPlayedItems({
-              includeItemTypes: itemType,
-              fields,
-              limit: PAGE_SIZE,
-              startIndex: 0,
-            });
-            const allItems = [...firstPage.Items];
-            const total = firstPage.TotalRecordCount;
-
-            // Fetch remaining pages if there are more items
-            let offset = PAGE_SIZE;
-            while (offset < total) {
-              const page = await jellyfinClient.getPlayedItems({
-                includeItemTypes: itemType,
-                fields,
-                limit: PAGE_SIZE,
-                startIndex: offset,
-              });
-              allItems.push(...page.Items);
-              offset += PAGE_SIZE;
-            }
-
-            return { Items: allItems, TotalRecordCount: total };
-          };
-
-          const movies = await fetchAllPlayedItems(
-            'Movie',
-            'Genres,People,RunTimeTicks,DateCreated,PremiereDate,DatePlayed'
-          );
-
-          const episodes = await fetchAllPlayedItems(
-            'Episode',
-            'Genres,People,RunTimeTicks,DateCreated,SeriesName,DatePlayed'
-          );
-
-          stats.totalMoviesWatched = movies.TotalRecordCount;
-          stats.totalEpisodesWatched = episodes.TotalRecordCount;
-
-          // FIX: Sort merged items by DatePlayed descending so that "Most Recent Watch"
-          // reflects the actual last-watched item across both movies and episodes,
-          // not just the first movie in the unsorted concatenation.
-          const allItems = [...movies.Items, ...episodes.Items].sort((a, b) => {
-            const dateA = new Date(
-              a.DatePlayed || a.DateCreated || 0
-            ).getTime();
-            const dateB = new Date(
-              b.DatePlayed || b.DateCreated || 0
-            ).getTime();
-            return dateB - dateA;
-          });
-
-          // Calculate total watch time
-          let totalTicksWatched = 0;
-          const genreCounts = new Map<string, number>();
-          const actorCounts = new Map<string, number>();
-          const directorCounts = new Map<string, number>();
-          const showEpisodeCounts = new Map<string, number>();
-          const decadeCounts = new Map<string, number>();
-          const playDates: Date[] = [];
-          const hourCounts = new Map<number, number>();
-          const dayCounts = new Map<string, number>();
-          // Track genres per month for the Genre Evolution chart
-          const monthGenreCounts = new Map<string, Map<string, number>>();
-          // Track unique series names for library utilization
-          const watchedSeriesNames = new Set<string>();
-          const dayNames = [
-            'Sunday',
-            'Monday',
-            'Tuesday',
-            'Wednesday',
-            'Thursday',
-            'Friday',
-            'Saturday',
-          ];
-
-          for (const item of allItems) {
-            // Watch time
-            if (item.RunTimeTicks) {
-              totalTicksWatched += item.RunTimeTicks;
-            }
-
-            // Genres
-            if (item.Genres) {
-              for (const genre of item.Genres) {
-                genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + 1);
-              }
-            }
-
-            // People (actors, directors)
-            if (item.People) {
-              for (const person of item.People) {
-                if (person.Type === 'Actor' && person.Name) {
-                  actorCounts.set(
-                    person.Name,
-                    (actorCounts.get(person.Name) ?? 0) + 1
-                  );
-                }
-                if (person.Type === 'Director' && person.Name) {
-                  directorCounts.set(
-                    person.Name,
-                    (directorCounts.get(person.Name) ?? 0) + 1
-                  );
-                }
-              }
-            }
-
-            // Show episode counts
-            if (item.SeriesName) {
-              showEpisodeCounts.set(
-                item.SeriesName,
-                (showEpisodeCounts.get(item.SeriesName) ?? 0) + 1
-              );
-              // Track unique watched series for library utilization
-              watchedSeriesNames.add(item.SeriesName);
-            }
-
-            // Decade counting (from release date)
-            const premiereDate = item.PremiereDate || item.DateCreated;
-            if (premiereDate) {
-              const year = new Date(premiereDate).getFullYear();
-              const decade = `${Math.floor(year / 10) * 10}s`;
-              decadeCounts.set(decade, (decadeCounts.get(decade) ?? 0) + 1);
-            }
-
-            // Play date tracking for streaks and time insights
-            const datePlayed = item.DatePlayed || item.DateCreated;
-            if (datePlayed) {
-              const playDate = new Date(datePlayed);
-              playDates.push(playDate);
-
-              // Hour tracking
-              const hour = playDate.getHours();
-              hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1);
-
-              // Day tracking
-              const dayName = dayNames[playDate.getDay()];
-              dayCounts.set(dayName, (dayCounts.get(dayName) ?? 0) + 1);
-            }
-
-            // Genre-by-week tracking for Genre Evolution chart.
-            // Only use actual DatePlayed (not DateCreated fallback) to avoid
-            // phantom data from items marked as played during library import
-            // that have DateCreated well before the user started watching.
-            if (item.DatePlayed && item.Genres) {
-              const actualPlayDate = new Date(item.DatePlayed);
-              const weekKey = getApproxWeekKey(actualPlayDate);
-
-              if (!monthGenreCounts.has(weekKey)) {
-                monthGenreCounts.set(weekKey, new Map());
-              }
-              const weekMap = monthGenreCounts.get(weekKey)!;
-              for (const genre of item.Genres) {
-                weekMap.set(genre, (weekMap.get(genre) ?? 0) + 1);
-              }
-            }
-          }
-
-          // Convert ticks to minutes (1 tick = 100 nanoseconds = 1e-7 seconds)
-          stats.totalWatchTimeMinutes = Math.round(
-            totalTicksWatched / 10_000_000 / 60
-          );
-
-          // Average watch time per week
-          if (playDates.length > 0) {
-            const sortedDates = playDates.sort(
-              (a, b) => a.getTime() - b.getTime()
-            );
-            const firstWatch = sortedDates[0];
-            const now = new Date();
-            const weeksSinceFirst = Math.max(
-              1,
-              (now.getTime() - firstWatch.getTime()) / (7 * 24 * 60 * 60 * 1000)
-            );
-            stats.averageWatchTimePerWeekMinutes = Math.round(
-              stats.totalWatchTimeMinutes / weeksSinceFirst
-            );
-          }
-
-          // Top 5 genres
-          stats.topGenres = Array.from(genreCounts.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([name, count]) => ({ name, count }));
-
-          // Favorite decade
-          if (decadeCounts.size > 0) {
-            stats.favoriteDecade = Array.from(decadeCounts.entries()).sort(
-              (a, b) => b[1] - a[1]
-            )[0][0];
-          }
-
-          // Top 5 actors
-          stats.topActors = Array.from(actorCounts.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([name, count]) => ({ name, count }));
-
-          // Top 5 directors
-          stats.topDirectors = Array.from(directorCounts.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([name, count]) => ({ name, count }));
-
-          // Most watched show
-          if (showEpisodeCounts.size > 0) {
-            const [showName, episodeCount] = Array.from(
-              showEpisodeCounts.entries()
-            ).sort((a, b) => b[1] - a[1])[0];
-            stats.mostWatchedShow = {
-              name: showName,
-              episodeCount,
-            };
-          }
-
-          // Most recent watch
-          if (allItems.length > 0) {
-            const mostRecent = allItems[0];
-            stats.mostRecentWatch = {
-              title: mostRecent.SeriesName
-                ? `${mostRecent.SeriesName} - ${mostRecent.Name}`
-                : mostRecent.Name,
-              date: mostRecent.DatePlayed || mostRecent.DateCreated || '',
-            };
-          }
-
-          // Streaks (consecutive days with at least one watch)
-          if (playDates.length > 0) {
-            const uniqueDays = new Set<string>();
-            for (const date of playDates) {
-              uniqueDays.add(date.toISOString().split('T')[0]);
-            }
-            const sortedDays = Array.from(uniqueDays).sort();
-
-            let currentStreak = 0;
-            let longestStreak = 0;
-            let tempStreak = 1;
-
-            const today = new Date().toISOString().split('T')[0];
-            const yesterday = new Date(Date.now() - 86400000)
-              .toISOString()
-              .split('T')[0];
-
-            for (let i = 1; i < sortedDays.length; i++) {
-              const prev = new Date(sortedDays[i - 1]);
-              const curr = new Date(sortedDays[i]);
-              const diffDays = Math.round(
-                (curr.getTime() - prev.getTime()) / 86400000
-              );
-
-              if (diffDays === 1) {
-                tempStreak++;
-              } else {
-                longestStreak = Math.max(longestStreak, tempStreak);
-                tempStreak = 1;
-              }
-            }
-            longestStreak = Math.max(longestStreak, tempStreak);
-
-            // Check if current streak includes today or yesterday
-            const lastDay = sortedDays[sortedDays.length - 1];
-            if (lastDay === today || lastDay === yesterday) {
-              tempStreak = 1;
-              for (let i = sortedDays.length - 2; i >= 0; i--) {
-                const curr = new Date(sortedDays[i + 1]);
-                const prev = new Date(sortedDays[i]);
-                const diffDays = Math.round(
-                  (curr.getTime() - prev.getTime()) / 86400000
-                );
-                if (diffDays === 1) {
-                  tempStreak++;
-                } else {
-                  break;
-                }
-              }
-              currentStreak = tempStreak;
-            }
-
-            stats.currentStreak = currentStreak;
-            stats.longestStreak = longestStreak;
-          }
-
-          // Preferred watching hour
-          if (hourCounts.size > 0) {
-            stats.preferredWatchingHour = Array.from(hourCounts.entries()).sort(
-              (a, b) => b[1] - a[1]
-            )[0][0];
-          }
-
-          // Most active day
-          if (dayCounts.size > 0) {
-            stats.mostActiveDay = Array.from(dayCounts.entries()).sort(
-              (a, b) => b[1] - a[1]
-            )[0][0];
-          }
-
-          // Genre Evolution Over Time: build sorted monthly genre data
-          if (monthGenreCounts.size > 0) {
-            const sortedMonths = Array.from(monthGenreCounts.keys()).sort();
-            stats.genresByMonth = sortedMonths.map((month) => {
-              const genreMap = monthGenreCounts.get(month)!;
-              const genres = Array.from(genreMap.entries())
-                .sort((a, b) => b[1] - a[1])
-                .map(([name, count]) => ({ name, count }));
-              return { month, genres };
-            });
-          }
-
-          // Library Utilization: fetch total library counts from Jellyfin
-          try {
-            const libraries = await jellyfinClient.getLibraries();
-            let totalMovies = 0;
-            let totalShows = 0;
-            let totalEpisodes = 0;
-            for (const lib of libraries) {
-              const contents = await jellyfinClient.getLibraryContents(lib.key);
-              for (const item of contents) {
-                if (item.Type === 'Movie') totalMovies++;
-                if (item.Type === 'Series') totalShows++;
-              }
-            }
-
-            // Fetch total episode count from Jellyfin
-            try {
-              const epResponse = await axios.get(
-                `${baseUrl}/Items?IncludeItemTypes=Episode&Recursive=true&Limit=0&userId=${encodeURIComponent(
-                  user.jellyfinUserId!
-                )}&api_key=${encodeURIComponent(jf.apiKey)}`
-              );
-              totalEpisodes = epResponse.data?.TotalRecordCount ?? 0;
-            } catch {
-              // If episode count fetch fails, leave as 0
-            }
-
-            const watchedMovies = movies.TotalRecordCount;
-            const watchedShows = watchedSeriesNames.size;
-            const watchedEpisodes = episodes.TotalRecordCount;
-            const totalItems = totalMovies + totalShows;
-            const watchedItems = watchedMovies + watchedShows;
-            const overallPercentage =
-              totalItems > 0
-                ? Math.round((watchedItems / totalItems) * 1000) / 10
-                : 0;
-            stats.libraryUtilization = {
-              totalMovies,
-              totalShows,
-              totalEpisodes,
-              watchedMovies,
-              watchedShows,
-              watchedEpisodes,
-              overallPercentage,
-            };
-          } catch (libErr) {
-            logger.warn('Failed to fetch library counts for utilization stat', {
-              label: 'User',
-              message: (libErr as Error).message,
-            });
-          }
-        }
-      }
-
-      // Cache the result
       cache.set(cacheKey, stats);
 
       return res.status(200).json(stats);
@@ -1488,5 +1090,66 @@ router.get<{ id: string }, UserStatisticsResponse>(
     }
   }
 );
+
+/**
+ * GET /:id/wrapped
+ * Yearly recap, one page per user. Returns a locked envelope until the
+ * unlock timestamp; admins can pass ?preview=1 to see it early.
+ */
+router.get<
+  { id: string },
+  UserWrappedResponse | UserWrappedLockedResponse,
+  { id: string },
+  { year?: string; preview?: string }
+>('/:id/wrapped', isOwnProfileOrAdmin(), async (req, res, next) => {
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const unlocksAt = new Date(WRAPPED_UNLOCK_AT);
+  const isAdmin = hasPermission(Permission.ADMIN, req.user?.permissions ?? 0);
+  const previewing = isAdmin && req.query.preview === '1';
+
+  if (!previewing && Date.now() < unlocksAt.getTime()) {
+    return res.status(200).json({
+      locked: true,
+      year,
+      unlocksAt: unlocksAt.toISOString(),
+    });
+  }
+
+  try {
+    const cache = cacheManager.getCache('user-wrapped').data;
+    const cacheKey = `wrapped-${req.params.id}-${year}`;
+    const cached = cache.get<UserWrappedResponse>(cacheKey);
+
+    if (cached) {
+      return res.status(200).json(cached);
+    }
+
+    const user = await getRepository(User).findOneOrFail({
+      where: { id: Number(req.params.id) },
+    });
+    const settings = getSettings().tautulli;
+
+    if (!settings.hostname || !settings.port || !settings.apiKey) {
+      return next({ status: 404, message: 'Tautulli API not configured.' });
+    }
+
+    const aggregate = await collectWatchAggregate(
+      new TautulliAPI(settings),
+      user,
+      { year }
+    );
+    const wrapped = toWrappedResponse(aggregate, year);
+
+    cache.set(cacheKey, wrapped);
+
+    return res.status(200).json(wrapped);
+  } catch (e) {
+    logger.error('Failed to generate user wrapped', {
+      label: 'User',
+      message: e.message,
+    });
+    next({ status: 500, message: 'Failed to generate the wrapped recap.' });
+  }
+});
 
 export default router;

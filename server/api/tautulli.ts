@@ -33,6 +33,7 @@ export interface TautulliHistoryRecord {
   parent_title: string;
   paused_counter: number;
   percent_complete: number;
+  play_duration: number;
   platform: string;
   product: string;
   player: string;
@@ -104,6 +105,28 @@ interface TautulliMetadata {
   guid?: string;
   guids?: string[];
   rating_key?: number;
+  year?: number;
+  genres?: string[];
+  directors?: string[];
+  actors?: string[];
+  duration?: string;
+}
+
+export interface TautulliLibrary {
+  section_id: string;
+  section_name: string;
+  section_type: string;
+  count: string;
+  parent_count?: string;
+  child_count?: string;
+}
+
+interface TautulliLibrariesResponse {
+  response: {
+    result: string;
+    message?: string;
+    data: TautulliLibrary[];
+  };
 }
 
 interface TautulliMetadataResponse {
@@ -240,6 +263,86 @@ class TautulliAPI {
         ratingKey,
       });
       throw new Error(`[Tautulli] Failed to fetch metadata: ${e.message}`, {
+        cause: e,
+      });
+    }
+  }
+
+  /**
+   * Every play for one user, ungrouped, oldest first. Watch statistics need
+   * individual plays (a binge is several rows, not one grouped session), which
+   * is why this does not go through `getUserWatchHistory`.
+   */
+  public async getUserHistory(
+    user: User,
+    /* Tautulli takes YYYY-MM-DD strings here; an epoch timestamp silently
+       matches nothing, which is a quiet way to return zero plays. */
+    opts: { after?: string; before?: string } = {}
+  ): Promise<TautulliHistoryRecord[]> {
+    const records: TautulliHistoryRecord[] = [];
+    const pageSize = 1000;
+
+    try {
+      if (!user.plexId) {
+        throw new Error('User does not have an associated Plex ID');
+      }
+
+      let start = 0;
+
+      for (;;) {
+        const page = (
+          await this.axios.get<TautulliHistoryResponse>('/api/v2', {
+            params: {
+              cmd: 'get_history',
+              order_column: 'date',
+              order_dir: 'asc',
+              user_id: user.plexId,
+              media_type: 'movie,episode',
+              length: pageSize,
+              start,
+              after: opts.after,
+              before: opts.before,
+            },
+          })
+        ).data.response.data.data;
+
+        records.push(...page);
+
+        if (page.length < pageSize || records.length >= HISTORY_MAX_RECORDS) {
+          break;
+        }
+        start += pageSize;
+      }
+
+      return records;
+    } catch (e) {
+      logger.error(
+        'Something went wrong fetching full user history from Tautulli',
+        {
+          label: 'Tautulli API',
+          errorMessage: e.message,
+          user: user.displayName,
+        }
+      );
+      throw new Error(`[Tautulli] Failed to fetch user history: ${e.message}`, {
+        cause: e,
+      });
+    }
+  }
+
+  public async getLibraries(): Promise<TautulliLibrary[]> {
+    try {
+      return (
+        await this.axios.get<TautulliLibrariesResponse>('/api/v2', {
+          params: { cmd: 'get_libraries' },
+        })
+      ).data.response.data;
+    } catch (e) {
+      logger.error('Something went wrong fetching libraries from Tautulli', {
+        label: 'Tautulli API',
+        errorMessage: e.message,
+      });
+      throw new Error(`[Tautulli] Failed to fetch libraries: ${e.message}`, {
         cause: e,
       });
     }
