@@ -1806,6 +1806,7 @@
   "components.UserProfile.totalrequests": "Total Requests",
   "components.UserProfile.unlimited": "Unlimited",
   "components.Wrapped.acrossPlays": "Across {plays} plays, {shows} shows and {movies} films.",
+  "components.Wrapped.adminPreview": "Admin preview — everyone else sees a countdown until 11 December, 20:00.",
   "components.Wrapped.backToBack": "{show}, back to back.",
   "components.Wrapped.basedOn": "Based on everything above, you are",
   "components.Wrapped.bestOfYear": "Best of the year",

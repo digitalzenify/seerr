@@ -1,5 +1,5 @@
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
-import { useUser } from '@app/hooks/useUser';
+import { Permission, useUser } from '@app/hooks/useUser';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
 import type {
@@ -73,6 +73,8 @@ const messages = defineMessages('components.Wrapped', {
   emptyBody:
     'Once you start watching, this page fills up. The wrapped is composed from your own play history, not the whole server.',
   somethingWrong: 'Something went wrong fetching your wrapped.',
+  adminPreview:
+    'Admin preview — everyone else sees a countdown until 11 December, 20:00.',
 });
 
 const PAPER = 'text-[#F5EFE6]';
@@ -232,9 +234,18 @@ const Wrapped = ({ userId }: Props) => {
   const { user } = useUser();
   const targetId = userId ?? user?.id;
 
+  // Admins see their own recap before the public unlock so it can be checked;
+  // everyone else gets the countdown until 11 December.
+  const isAdmin = Boolean((user?.permissions ?? 0) & Permission.ADMIN);
+  const canPreview = isAdmin && targetId === user?.id;
+
   const { data, error } = useSWR<
     UserWrappedResponse | UserWrappedLockedResponse
-  >(targetId ? `/api/v1/user/${targetId}/wrapped` : null);
+  >(
+    targetId
+      ? `/api/v1/user/${targetId}/wrapped${canPreview ? '?preview=1' : ''}`
+      : null
+  );
 
   if (error) {
     return <ErrorPage statusCode={500} />;
@@ -292,6 +303,11 @@ const Wrapped = ({ userId }: Props) => {
   return (
     <div className="mb-10 mt-4 flex justify-center">
       <div className="w-full max-w-[430px] space-y-3">
+        {canPreview && (
+          <div className="rounded-lg border border-[rgba(255,176,32,0.35)] bg-[rgba(255,176,32,0.1)] px-3 py-2 text-center text-[12px] text-[#FFB020]">
+            {intl.formatMessage(messages.adminPreview)}
+          </div>
+        )}
         {/* 01 — year */}
         <Card>
           <Eyebrow
