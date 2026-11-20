@@ -5690,7 +5690,7 @@ paths:
       description: |
         Returns detailed viewing statistics for the user including watch counts,
         favorite genres, streaks, and time-based insights.
-        Data is sourced from Jellyfin watch history and request history.
+        Data is sourced from Tautulli play history and request history.
         Results are cached per-user for 4 hours.
       tags:
         - users
@@ -5810,6 +5810,54 @@ paths:
                         type: number
                       overallPercentage:
                         type: number
+  /user/{userId}/wrapped:
+    get:
+      summary: Get a user's yearly wrapped recap
+      description: |
+        Yearly viewing recap for one user, computed from Tautulli play history.
+        Returns a locked envelope (200) until the unlock timestamp, unless an
+        admin passes preview=1. Results are cached per user and year.
+      tags:
+        - users
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: number
+        - in: query
+          name: year
+          required: false
+          schema:
+            type: number
+        - in: query
+          name: preview
+          required: false
+          description: Admin only - bypass the unlock date.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Wrapped recap, or a locked envelope before the unlock date
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  locked:
+                    type: boolean
+                  year:
+                    type: number
+                  unlocksAt:
+                    type: string
+                  hours:
+                    type: number
+                  plays:
+                    type: number
+                  daysActive:
+                    type: number
+                  personality:
+                    type: object
   /user/{userId}/lists:
     get:
       summary: Get user custom lists

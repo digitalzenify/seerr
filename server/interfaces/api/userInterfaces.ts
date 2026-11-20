@@ -71,3 +71,42 @@ export interface UserStatisticsResponse {
     overallPercentage: number;
   } | null;
 }
+
+export interface UserWrappedResponse {
+  year: number;
+  plays: number;
+  hours: number;
+  daysActive: number;
+  moviePlays: number;
+  episodePlays: number;
+  uniqueMovies: number;
+  uniqueShows: number;
+  averageSessionMinutes: number;
+  topShow: {
+    title: string;
+    episodes: number;
+    hours: number;
+    share: number;
+    ratingKey: string | null;
+  } | null;
+  topMovie: { title: string; plays: number; ratingKey: string | null } | null;
+  genres: { name: string; share: number }[];
+  actors: string[];
+  directors: string[];
+  favoriteDecade: string | null;
+  longestBinge: { date: string; show: string; episodes: number } | null;
+  busiestDay: { date: string; minutes: number } | null;
+  longestStreak: { days: number; start: string } | null;
+  peakHour: number;
+  peakHourPlays: number[];
+  peakWeekday: string | null;
+  topPlatform: { name: string; share: number } | null;
+  firstPlay: { title: string; date: string } | null;
+  personality: { key: string; name: string; line: string };
+}
+
+export interface UserWrappedLockedResponse {
+  locked: true;
+  year: number;
+  unlocksAt: string;
+}

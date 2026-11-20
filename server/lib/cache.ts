@@ -17,7 +17,8 @@ export type AvailableCacheIds =
   | 'new-for-you'
   | 'trakt'
   | 'trakt-discover'
-  | 'user-stats';
+  | 'user-stats'
+  | 'user-wrapped';
 
 const DEFAULT_TTL = 300;
 
@@ -293,6 +294,12 @@ class CacheManager {
     // preventing stale "Most Recent Watch" and other time-sensitive stats.
     'user-stats': new Cache('user-stats', 'User Statistics', {
       stdTtl: 14400, // 4 hour cache
+      max: 64,
+    }),
+    // The wrapped barely changes once computed (all plays are in the past),
+    // so it can sit for a day.
+    'user-wrapped': new Cache('user-wrapped', 'Yearly Wrapped', {
+      stdTtl: 86400,
       max: 64,
     }),
   };

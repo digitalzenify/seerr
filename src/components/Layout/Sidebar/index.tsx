@@ -12,6 +12,7 @@ import {
   ExclamationTriangleIcon,
   EyeSlashIcon,
   FilmIcon,
+  GiftIcon,
   RectangleStackIcon,
   SparklesIcon,
   TvIcon,
@@ -32,6 +33,7 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   collections: 'Collections',
   calendar: 'Calendar',
   statistics: 'Statistics',
+  wrapped: 'Wrapped',
   blocklist: 'Blocklist',
   issues: 'Issues',
   users: 'Users',
@@ -100,6 +102,12 @@ const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'statistics',
     svgIcon: <ChartBarSquareIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/(profile|users\/\d+)\/statistics/,
+  },
+  {
+    href: '/wrapped',
+    messagesKey: 'wrapped',
+    svgIcon: <GiftIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/wrapped/,
   },
   {
     href: '/blocklist',
